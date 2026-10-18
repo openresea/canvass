@@ -1,9 +1,9 @@
 # Commercial use
 
-Resea Canvass is available without a licence fee for the purposes permitted by the [PolyForm Noncommercial licence](LICENSE). This includes noncommercial use and the organisations listed in its Noncommercial Organizations section. Hosting, email, and telephone providers may charge for their services.
+Resea Canvass is free for any non-commercial use under the [PolyForm Noncommercial licence](LICENSE). That includes charities, community groups, schools, public bodies and individuals. You'll still pay your own hosting and email providers.
 
-For commercial use outside those permissions, contact the maintainer and obtain a separate written agreement before use. Pricing, support, and permitted uses will be agreed individually. Sending an enquiry does not grant commercial permission.
+If you'd like to use it to make money, for example as a paid service or inside a commercial product, please get in touch first. We'll agree the details with you in writing. Sending an enquiry doesn't give permission on its own.
 
-Contact [resea@tuta.io](mailto:resea@tuta.io) with your organisation name, intended use, and expected number of users to discuss a commercial licence.
+Email [resea@tuta.io](mailto:resea@tuta.io) with your organisation's name, what you'd like to do, and roughly how many people will use it.
 
-Third-party dependencies retain their own licences. A commercial agreement for Resea Canvass does not replace those terms.
+The libraries Resea Canvass depends on keep their own licences, and a commercial agreement with us doesn't change those.

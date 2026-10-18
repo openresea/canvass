@@ -5,15 +5,19 @@ import secrets
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-import pytest
+
 import psycopg2
+import pytest
+from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
 from psycopg2 import sql
 from psycopg2.pool import ThreadedConnectionPool
-from fastapi.testclient import TestClient
-from cryptography.fernet import Fernet
-from app.common.db import POOLS
+
 from app.admin.main import app as admin_app
 from app.canvasser.main import app as canvasser_app
+from app.common.db import POOLS
+
+ROUTE_CODE = "test-route-SAMPLE2345"
 
 
 @pytest.fixture
@@ -26,7 +30,7 @@ def db(monkeypatch):
     monkeypatch.setattr(crypto, "_fernet_instance", None)
     key = Fernet.generate_key()
     monkeypatch.setenv("ROUTE_CODE_FERNET_KEY", key.decode())
-    ciphertext = Fernet(key).encrypt(b"sample-route-code").decode()
+    ciphertext = Fernet(key).encrypt(ROUTE_CODE.encode()).decode()
     root = psycopg2.connect(dsn)
     root.autocommit = True
     suffix = uuid.uuid4().hex[:12]
@@ -42,22 +46,9 @@ def db(monkeypatch):
         connections.append(ops)
         ans = psycopg2.connect(**{**settings, "dbname": names[1]})
         connections.append(ans)
-        for conn, files in [
-            (
-                ops,
-                [
-                    "ops_schema.sql",
-                    "ops_scope.sql",
-                    "survey_schema.sql",
-                    "email_auth_schema.sql",
-                    "roles_and_grants_ops.sql",
-                ],
-            ),
-            (ans, ["answers_schema.sql", "roles_and_grants_answers.sql"]),
-        ]:
+        for conn, filename in [(ops, "ops.sql"), (ans, "answers.sql")]:
             with conn, conn.cursor() as cur:
-                for filename in files:
-                    cur.execute((Path("app/sql") / filename).read_text())
+                cur.execute((Path("app/sql") / filename).read_text())
         with ops, ops.cursor() as cur:
             cur.execute("INSERT INTO boroughs VALUES ('LOCAL','Example region')")
             cur.execute("INSERT INTO areas VALUES ('LOCAL_CENTRAL','LOCAL','Central')")
@@ -68,8 +59,8 @@ def db(monkeypatch):
                 "INSERT INTO routes(route_id,name,borough_id,area_id) VALUES ('test-route','Example route','LOCAL','LOCAL_CENTRAL'),('other-route','Other route','LOCAL','LOCAL_CENTRAL')"
             )
             cur.execute(
-                "INSERT INTO route_codes(route_id,code_hash,code_ciphertext,expires_at) VALUES ('test-route',crypt('sample-route-code',gen_salt('bf')),%s,now()+interval '1 hour') RETURNING code_hash",
-                (ciphertext,),
+                "INSERT INTO route_codes(route_id,code_hash,code_ciphertext,expires_at) VALUES ('test-route',crypt(%s,gen_salt('bf')),%s,now()+interval '1 hour') RETURNING code_hash",
+                (ROUTE_CODE, ciphertext),
             )
             code_hash = cur.fetchone()[0]
             cur.execute(
@@ -150,6 +141,7 @@ def db(monkeypatch):
             ops=ops,
             answers=ans,
             flat_id=flat_id,
+            route_code=ROUTE_CODE,
             address_id=address_id,
             admin=Client(
                 admin_app, admin_pool, "admin_session", tokens["admin@example.test"]

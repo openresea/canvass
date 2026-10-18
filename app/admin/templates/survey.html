@@ -101,7 +101,7 @@ async function api(body) {
     body: JSON.stringify(body)
   } : {});
   const data = await r.json();
-  if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not save. Please try again.');
+  if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Sorry, we couldn\'t save that. Please try again.');
   return data;
 }
 

@@ -1,9 +1,8 @@
 import os
-from typing import Optional
 
 from cryptography.fernet import Fernet
 
-_fernet_instance: Optional[Fernet] = None
+_fernet_instance: Fernet | None = None
 
 
 def _fernet() -> Fernet:

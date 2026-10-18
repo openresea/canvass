@@ -13,25 +13,29 @@ from email.message import EmailMessage
 
 from fastapi import HTTPException
 from psycopg2 import sql
+
 from app.common.db import get_ops, put_ops
 from app.common.util import fetchone_dict
 
 logger = logging.getLogger(__name__)
 TABLES = {"admin": "admin_login_codes", "canvasser": "canvasser_login_codes"}
-GENERIC_NOTICE = "If this email is eligible, a sign-in code will arrive shortly. Check your spam folder too."
+GENERIC_NOTICE = (
+    "Thanks! If this address can sign in, your code is on its way. "
+    "It can take a minute, so check your spam folder too."
+)
 
 
 def normalize_email(raw):
     if not isinstance(raw, str):
-        raise HTTPException(400, "Enter your email address.")
+        raise HTTPException(400, "Please enter your email address.")
     value = raw.strip().lower()
     if len(value) > 254 or not re.fullmatch(
         r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}",
         value,
     ):
-        raise HTTPException(400, "Enter a valid email address.")
+        raise HTTPException(400, "That email address doesn't look quite right. Could you check it?")
     if ".." in value or value.startswith(".") or ".@" in value:
-        raise HTTPException(400, "Enter a valid email address.")
+        raise HTTPException(400, "That email address doesn't look quite right. Could you check it?")
     return value
 
 
@@ -82,7 +86,7 @@ def enforce_limits(purpose, ip, email=None, *, verification=False):
     if not allowed:
         raise HTTPException(
             429,
-            "Too many attempts. Please wait before trying again.",
+            "That's a lot of tries in a short time. Please wait a few minutes and try again.",
             headers={"Retry-After": "900"},
         )
 
@@ -104,11 +108,12 @@ def send_code(email, code, purpose):
     message = EmailMessage()
     message["From"] = sender
     message["To"] = email
-    message["Subject"] = f"Your Resea Canvass {purpose} sign-in code"
+    message["Subject"] = "Your Resea Canvass sign-in code"
     message.set_content(
-        f"Your sign-in code is: {code}\n\nIt expires in 10 minutes and can be used once.\n"
-        "Enter it only on the Resea Canvass site where you requested it.\n"
-        "Do not share this code. If you did not request it, ignore this email.\n"
+        f"Hi,\n\nHere's your sign-in code: {code}\n\n"
+        "It works once and expires in 10 minutes. Only type it into the Resea Canvass "
+        "page where you asked for it, and please don't share it with anyone.\n\n"
+        "If you didn't ask for a code, you can safely ignore this email.\n"
     )
     context = ssl.create_default_context()
     factory = smtplib.SMTP_SSL if mode == "ssl" else smtplib.SMTP
@@ -143,7 +148,7 @@ def request_code(email, purpose, ip, background_tasks):
         mail_config()
     except (RuntimeError, HTTPException):
         raise HTTPException(
-            503, "Email sign-in is not configured. Contact the app administrator."
+            503, "Email sign-in isn't set up yet. Please let your organiser know."
         )
     challenge = str(uuid.uuid4())
     code = f"{secrets.randbelow(1000000):06d}"
@@ -181,13 +186,13 @@ def request_code(email, purpose, ip, background_tasks):
     }
 
 
-def verify_code(body, purpose, ip):
+def verify_code(body, purpose):
+    """Callers must apply enforce_limits(purpose, ip, verification=True) first."""
     email = normalize_email(body.get("email"))
-    enforce_limits(purpose, ip, verification=True)
     try:
         challenge = str(uuid.UUID(str(body.get("challenge_id"))))
     except ValueError:
-        raise HTTPException(401, "Code is invalid or expired. Request a new code.")
+        raise HTTPException(401, "That code didn't work. It may have expired, so try asking for a new one.")
     code = body.get("code")
     valid_shape = isinstance(code, str) and re.fullmatch(r"[0-9]{6}", code) is not None
     conn = get_ops()
@@ -219,5 +224,5 @@ def verify_code(body, purpose, ip):
     finally:
         put_ops(conn)
     if not accepted:
-        raise HTTPException(401, "Code is invalid or expired. Request a new code.")
+        raise HTTPException(401, "That code didn't work. It may have expired, so try asking for a new one.")
     return email

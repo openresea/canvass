@@ -5,12 +5,8 @@ psql -v ON_ERROR_STOP=1 --username postgres --dbname postgres <<'SQL'
 CREATE DATABASE canvass_ops;
 CREATE DATABASE canvass_answers;
 SQL
-for schema in ops_schema ops_scope survey_schema email_auth_schema roles_and_grants_ops; do
-  psql -v ON_ERROR_STOP=1 --username postgres --dbname canvass_ops -f "/schemas/$schema.sql"
-done
-for schema in answers_schema roles_and_grants_answers; do
-  psql -v ON_ERROR_STOP=1 --username postgres --dbname canvass_answers -f "/schemas/$schema.sql"
-done
+psql -v ON_ERROR_STOP=1 --username postgres --dbname canvass_ops -f /schemas/ops.sql
+psql -v ON_ERROR_STOP=1 --username postgres --dbname canvass_answers -f /schemas/answers.sql
 psql -v ON_ERROR_STOP=1 --username postgres --dbname postgres \
   -v ops_admin_password="$OPS_ADMIN_PASSWORD" -v ops_canvasser_password="$OPS_CANVASSER_PASSWORD" \
   -v answers_admin_password="$ANSWERS_ADMIN_PASSWORD" -v answers_writer_password="$ANSWERS_WRITER_PASSWORD" <<'SQL'

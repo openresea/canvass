@@ -1,14 +1,16 @@
 import asyncio
+
 import pytest
 from fastapi import HTTPException
-from starlette.requests import Request
 from fastapi.testclient import TestClient
-from app.common.security import same_origin_write_request, json_object_body
-from app.common.auth import validate_session_token
-from app.common.ratelimit import client_ip
-from app.common.survey import question_data, validate_answers
-from app.admin.main import app as admin_app, _csv_cell
+from starlette.requests import Request
+
+from app.admin.main import _csv_cell
+from app.admin.main import app as admin_app
 from app.canvasser.main import app as canvasser_app
+from app.common.auth import validate_session_token
+from app.common.security import client_ip, json_object_body, same_origin_write_request
+from app.common.survey import question_data, validate_answers
 
 
 def request(headers=(), scheme="https"):
@@ -90,10 +92,7 @@ def test_anonymous_and_cross_origin_writes(app, path):
         == 401
     )
     assert (
-        client.get(
-            "/static/app.css", headers={"Host": "evil.test"}
-        ).status_code
-        == 400
+        client.get("/static/app.css", headers={"Host": "evil.test"}).status_code == 400
     )
 
 

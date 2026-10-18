@@ -15,4 +15,6 @@ USER appuser
 
 ENV APP_MODULE=app.canvasser.main:app
 
-CMD ["sh", "-c", "exec uvicorn \"$APP_MODULE\" --host 0.0.0.0 --port \"${PORT:-8080}\""]
+# No access log: it would record every canvasser's IP address and route.
+# Set FORWARDED_ALLOW_IPS to your reverse proxy's address so rate limits see real client IPs.
+CMD ["sh", "-c", "exec uvicorn \"$APP_MODULE\" --host 0.0.0.0 --port \"${PORT:-8080}\" --no-access-log --no-server-header"]

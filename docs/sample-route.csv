@@ -1,4 +1,12 @@
-street,house,postcode
-Example Street,1,AB1 2CD
-Example Street,2,AB1 2CD
-Sample Road,10,AB1 2EF
+street,house,flat_number,postcode,resident_name
+Example Street,1,,AB1 2CD,Alex Example
+Example Street,1,,AB1 2CD,Sam Example
+Example Street,2,,AB1 2CD,
+Example Street,3,A,AB1 2CD,Jordan Sample
+Example Street,3,B,AB1 2CD,
+Example Street,3,C,AB1 2CD,Taylor Sample
+Sample Road,10,1,AB1 2EF,Riley Placeholder
+Sample Road,10,2,AB1 2EF,
+Sample Road,10,3,AB1 2EF,Casey Placeholder
+Sample Road,10,3,AB1 2EF,Jamie Placeholder
+Sample Road,12,,AB1 2EF,

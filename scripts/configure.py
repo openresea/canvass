@@ -2,9 +2,9 @@
 
 import base64
 import os
-from pathlib import Path
 import re
 import secrets
+from pathlib import Path
 
 
 def main():

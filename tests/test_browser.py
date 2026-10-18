@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
+
 import pytest
 
 pytestmark = pytest.mark.skipif(
@@ -11,7 +12,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_admin_editor_and_mobile_submission(db, monkeypatch):
-    from playwright.sync_api import sync_playwright, expect
+    from playwright.sync_api import expect, sync_playwright
 
     with sync_playwright() as p:
         browser = p.chromium.launch()

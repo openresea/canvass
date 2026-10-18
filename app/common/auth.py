@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from fastapi import HTTPException, Request
 
@@ -10,10 +10,10 @@ SESSION_COOKIE = "canvasser_session"
 ADMIN_SESSION_COOKIE = "admin_session"
 
 
-def require_session_for_route(req: Request, route_id: str) -> Dict[str, Any]:
+def require_session_for_route(req: Request, route_id: str) -> dict[str, Any]:
     session_token = (req.cookies.get(SESSION_COOKIE) or "").strip()
     if not session_token:
-        raise HTTPException(401, "Missing session cookie")
+        raise HTTPException(401, "Please sign in to continue.")
 
     validate_session_token(session_token)
     conn = get_ops()
@@ -32,7 +32,7 @@ def require_session_for_route(req: Request, route_id: str) -> Dict[str, Any]:
             )
             sess = fetchone_dict(cur)
             if not sess:
-                raise HTTPException(401, "Invalid or expired session")
+                raise HTTPException(401, "Your session has ended. Please sign in again.")
             return sess
     finally:
         put_ops(conn)
@@ -41,30 +41,27 @@ def require_session_for_route(req: Request, route_id: str) -> Dict[str, Any]:
 def create_admin_session(email: str) -> str:
     conn = get_ops()
     try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
                     INSERT INTO admin_sessions(email, expires_at)
                     VALUES (%s, now() + interval '12 hours')
                     RETURNING session_token
                     """,
-                    (email,),
-                )
-                row = fetchone_dict(cur)
-                if row is None:
-                    raise RuntimeError(
-                        "INSERT … RETURNING session_token returned no row"
-                    )
-                return str(row["session_token"])
+                (email,),
+            )
+            row = fetchone_dict(cur)
+            if row is None:
+                raise RuntimeError("INSERT … RETURNING session_token returned no row")
+            return str(row["session_token"])
     finally:
         put_ops(conn)
 
 
-def require_admin_session(req: Request) -> Dict[str, Any]:
+def require_admin_session(req: Request) -> dict[str, Any]:
     session_token = (req.cookies.get(ADMIN_SESSION_COOKIE) or "").strip()
     if not session_token:
-        raise HTTPException(401, "Missing admin session cookie")
+        raise HTTPException(401, "Please sign in to continue.")
 
     validate_session_token(session_token)
     conn = get_ops()
@@ -81,7 +78,7 @@ def require_admin_session(req: Request) -> Dict[str, Any]:
             )
             sess = fetchone_dict(cur)
             if not sess:
-                raise HTTPException(401, "Invalid or expired admin session")
+                raise HTTPException(401, "Your session has ended. Please sign in again.")
             return sess
     finally:
         put_ops(conn)
@@ -95,16 +92,13 @@ def delete_admin_session(session_token: str) -> None:
 
     conn = get_ops()
     try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "DELETE FROM admin_sessions WHERE session_token=%s", (token,)
-                )
+        with conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM admin_sessions WHERE session_token=%s", (token,))
     finally:
         put_ops(conn)
 
 
-def load_user_context(email: str) -> Dict[str, Any]:
+def load_user_context(email: str) -> dict[str, Any]:
     """
     Load role + scope from OPS DB.
     Expected tables:
@@ -120,7 +114,7 @@ def load_user_context(email: str) -> Dict[str, Any]:
             )
             u = fetchone_dict(cur)
             if not u:
-                raise HTTPException(403, "No access")
+                raise HTTPException(403, "Sorry, you don't have access to that.")
 
             cur.execute(
                 "SELECT area_id FROM user_areas WHERE lower(email)=lower(%s) ORDER BY area_id",
@@ -132,13 +126,13 @@ def load_user_context(email: str) -> Dict[str, Any]:
         put_ops(conn)
 
 
-def require_any_role(u: Dict[str, Any], allowed: List[str]) -> None:
+def require_any_role(u: dict[str, Any], allowed: list[str]) -> None:
     role = u.get("role")
     if role not in set(allowed):
-        raise HTTPException(403, "No access")
+        raise HTTPException(403, "Sorry, you don't have access to that.")
 
 
-def require_scope_for_area(u: Dict[str, Any], area_id: str) -> None:
+def require_scope_for_area(u: dict[str, Any], area_id: str) -> None:
     """
     Enforce:
       GLOBAL_ADMIN: any area
@@ -151,40 +145,32 @@ def require_scope_for_area(u: Dict[str, Any], area_id: str) -> None:
 
     if role == "AREA_USER":
         if area_id not in set(u.get("area_ids", [])):
-            raise HTTPException(403, "No access")
+            raise HTTPException(403, "Sorry, you don't have access to that.")
         return
 
     if role == "BOROUGH_ADMIN":
         borough_id = u.get("borough_id")
         if not borough_id:
-            raise HTTPException(403, "No access")
+            raise HTTPException(403, "Sorry, you don't have access to that.")
         conn = get_ops()
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT borough_id FROM areas WHERE area_id=%s", (area_id,))
                 a = fetchone_dict(cur)
                 if not a or a["borough_id"] != borough_id:
-                    raise HTTPException(403, "No access")
+                    raise HTTPException(403, "Sorry, you don't have access to that.")
             return
         finally:
             put_ops(conn)
 
-    raise HTTPException(403, "No access")
+    raise HTTPException(403, "Sorry, you don't have access to that.")
 
 
-_ALLOWED_ROUTE_ALIASES = frozenset({"r", "rc", "rt"})
-
-
-def route_scope_where(
-    u: Dict[str, Any], route_alias: str = "r"
-) -> Tuple[str, Tuple[Any, ...]]:
+def route_scope_where(u: dict[str, Any]) -> tuple[str, tuple[Any, ...]]:
     """
-    Returns (sql_fragment, params) to restrict routes by scope.
-    Assumes routes table has borough_id and area_id columns.
+    Returns (sql_fragment, params) restricting rows aliased `r` to the caller's
+    scope. `r` must have borough_id and area_id columns.
     """
-    if route_alias not in _ALLOWED_ROUTE_ALIASES:
-        raise ValueError(f"Invalid route_alias: {route_alias!r}")
-
     role = u.get("role")
     if role == "GLOBAL_ADMIN":
         return ("TRUE", ())
@@ -192,26 +178,21 @@ def route_scope_where(
     if role == "BOROUGH_ADMIN":
         borough_id = u.get("borough_id")
         if not borough_id:
-            raise HTTPException(403, "No access")
-        return (f"{route_alias}.borough_id = %s", (borough_id,))
+            raise HTTPException(403, "Sorry, you don't have access to that.")
+        return ("r.borough_id = %s", (borough_id,))
 
     if role == "AREA_USER":
         area_ids = u.get("area_ids") or []
         if not area_ids:
-            # No areas assigned => no access
             return ("FALSE", ())
-        # psycopg2 can adapt Python list to Postgres array with ANY(%s)
-        return (f"{route_alias}.area_id = ANY(%s)", (area_ids,))
+        return ("r.area_id = ANY(%s)", (area_ids,))
 
-    raise HTTPException(403, "No access")
+    raise HTTPException(403, "Sorry, you don't have access to that.")
 
 
-def require_route_in_scope(u: Dict[str, Any], route_id: str) -> Dict[str, Any]:
-    """
-    Fetch route and ensure caller is allowed to operate on it.
-    Returns route row with borough_id, area_id, route_number.
-    """
-    where, params = route_scope_where(u, route_alias="r")
+def require_route_in_scope(u: dict[str, Any], route_id: str) -> dict[str, Any]:
+    """Fetch the route, or 404 if it is outside the caller's scope."""
+    where, params = route_scope_where(u)
     conn = get_ops()
     try:
         with conn.cursor() as cur:
@@ -225,7 +206,7 @@ def require_route_in_scope(u: Dict[str, Any], route_id: str) -> Dict[str, Any]:
             )
             r = fetchone_dict(cur)
             if not r:
-                raise HTTPException(404, "Route not found or not in your scope")
+                raise HTTPException(404, "We couldn't find that route, or it isn't one of yours.")
             return r
     finally:
         put_ops(conn)
@@ -235,4 +216,4 @@ def validate_session_token(token):
     try:
         uuid.UUID(token)
     except (ValueError, TypeError, AttributeError):
-        raise HTTPException(401, "Invalid or expired session")
+        raise HTTPException(401, "Your session has ended. Please sign in again.")

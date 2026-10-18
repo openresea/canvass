@@ -1,37 +1,66 @@
-# Security model
+# Security and privacy
 
-This app handles resident information and survey responses. Automated checks are useful evidence, not an independent security audit or a guarantee that a deployment is secure.
+Resea Canvass holds people's names, addresses and what they told your volunteers, so it's worth taking a little care when you set it up. This page explains how the app protects that data and what's left for you to do. Our automated tests are useful evidence, but they aren't an independent security audit.
 
-## Email authentication
+## What the app stores about people
 
-Email sign-in proves access to a mailbox. It is vulnerable to mailbox compromise and phishing, and is not MFA. For deployments holding sensitive responses, protect administrator access with an additional passkey/MFA-capable access gateway until app-native stronger authentication is available. Email alone does not satisfy NIST's out-of-band authenticator requirements: [NIST guidance](https://pages.nist.gov/800-63-4/sp800-63b/authenticators/).
+Please be clear with your team, and with the people you canvass, about what's kept:
 
-Codes use cryptographic randomness, expire after ten minutes, and are consumed atomically. Five wrong attempts consume a challenge. Only an HMAC digest bound to the challenge, email and login purpose is stored; keep `EMAIL_CODE_SECRET` outside the database and source control. Resending invalidates earlier codes. Admin and canvasser challenges use separate tables, and the canvasser database role cannot read admin codes.
+- **Residents.** Whatever you import (name, address, flat, elector number), plus each visit's outcome, survey answers and notes. Saved answers are linked to the resident and address. They are **not anonymous**.
+- **Volunteers.** Their email address and the name they type in, attached to every visit they record.
+- **Organisers.** Their email address, and who changed which survey question.
+- **Sign-in data.** Email addresses waiting for a code, and sign-in sessions. Rate limits are stored under a keyed hash, so no IP addresses are kept in the database.
 
-PostgreSQL-backed limits apply across app instances: three emails per address per 15 minutes, at least 60 seconds between requests, 20 per IP per 15 minutes, 200 per service per hour, and 60 verification attempts per IP per 15 minutes. Limits include ineligible requests. Shared NATs can hit these limits; adjust deliberately after considering abuse. Configure edge throttling for overall traffic and login/route-code attempts. The app does not trust arbitrary forwarded IP headers.
+The app doesn't write web access logs, so volunteers' IP addresses and routes aren't recorded by default. Your reverse proxy may log them, so check its settings.
 
-SMTP requires TLS with certificate validation. Delivery runs after the HTTP response so SMTP timing does not reveal approved admin accounts. Delivery failures produce a generic server log without codes, credentials, or addresses. There is no durable mail queue or automatic delivery retry; the user can request another code after the cooldown. Codes never appear in API responses or app logs. The response for unknown admin accounts is identical to that for eligible accounts. Anyone may request a canvasser email code, but it grants no route access without a valid route code.
+The app doesn't delete old data on its own. Decide how long you need it, then remove it on a schedule (see "Housekeeping" below).
 
-Code handling follows the single-use, expiry, throttling and neutral-response principles in the [OWASP verification guidance](https://cheatsheetseries.owasp.org/cheatsheets/Email_Validation_and_Verification_Cheat_Sheet.html).
+## Signing in
 
-## Access and deployment
+Email codes prove that someone can read that inbox. That's convenient, but it isn't two-factor authentication, and anyone who gets into an organiser's email can sign in as them. If you're collecting sensitive answers, put the organiser side behind something with passkeys or 2FA, such as an identity-aware proxy. NIST explains why email alone isn't enough: [NIST guidance](https://pages.nist.gov/800-63-4/sp800-63b/authenticators/).
 
-- Serve HTTPS only outside localhost. Cookies are Secure, HttpOnly and SameSite=Lax. Use separate admin/canvasser hostnames. Sessions expire after twelve hours; admin approval is checked on every request. Deleting a user revokes their admin access. Logging out deletes the current session.
-- Set exact `ALLOWED_HOSTS`. Keep database ports private. Put the admin service behind a restricted access gateway, especially when collecting sensitive answers.
-- Configure Uvicorn's `--forwarded-allow-ips` to trust only your actual reverse proxy. TLS-terminating proxies must pass the correct scheme for same-origin write checks. Never trust `*` on an externally reachable server.
-- Writes require an exact same-origin Origin or Referer. Browser CSP allows only app scripts with a nonce or same-origin assets, disallows external frames, and forbids embedding this app. Private responses are not cached.
-- Survey changes require GLOBAL_ADMIN. Region/area roles and exports remain scoped. Canvasser sessions are route-bound and checked against the original route code's active/expiry state on every request.
-- The answers writer is INSERT-only. The export role is SELECT-only. The public service receives no export credentials or code-decryption key. Database role checks do not replace app-level route checks.
-- Configure backups, encrypted storage, secret rotation and a retention policy. The responses and operational receipt logs contain personal information; receipts are not anonymous. Use authorised owner-level maintenance for retention. The app does not implement a retention scheduler or field-level response encryption.
-- Operational receipts and response data live in separate databases. Retries use a payload hash and a unique submission ID, and recover a failed status update. There is no distributed transaction; monitor failed receipt events and reconcile interrupted writes. An old survey version must be reviewed before a new submission.
-- The local PostgreSQL container uses a private network. For databases across a network boundary use certificate-verified TLS (`*_SSLMODE=verify-full`) and an appropriate CA.
+How codes work:
 
-## Maintenance
+- Codes are random, last ten minutes and work once. Asking for a new code cancels the old one.
+- Five wrong guesses use up a code.
+- Only a keyed hash of each code is stored. Keep `EMAIL_CODE_SECRET` out of the database and out of git.
+- Organiser and volunteer codes live in separate tables, and the volunteer app can't read organiser codes.
+- The response is the same whether or not an email belongs to an organiser, and emails are sent after the page responds, so nobody can work out who your organisers are.
+- Codes never appear in web responses or logs. If sending fails, the log just says so, without codes or addresses.
+- Anyone can ask for a volunteer code, but it's useless without a valid route code.
 
-Run dependency audits and patch regularly. Keep `.env`, exported CSVs, database dumps, mail credentials, route codes and real resident data out of commits. Do not log request bodies or cookies at the proxy. Do not put resident data or active credentials in public issues.
+Limits are shared across all copies of the app: three emails per address every 15 minutes (at least a minute apart), 20 per IP address every 15 minutes, 200 per app per hour, and 60 sign-in attempts per IP address every 15 minutes. Volunteers behind the same office or mobile network share an IP limit, so adjust it if that causes trouble.
 
-As a privileged scheduled maintenance job, remove expired admin/canvasser sessions, email challenges older than one day, and `email_auth_limits` whose `resets_at` is older than one day. This avoids indefinite retention of authentication metadata. Do not grant the public runtime broader privileges to perform maintenance.
+Route codes contain the route name, which means a sign-in attempt only ever checks that route's codes. That keeps each guess cheap for the server while staying slow and hopeless for an attacker. Codes are stored as bcrypt hashes. Only the organiser app holds the key that can show them again.
 
-## Reporting
+## Putting it online safely
 
-Report vulnerabilities privately to [resea@tuta.io](mailto:resea@tuta.io). Include the affected version, reproduction steps using fictional data, and the expected impact. Never include live resident data, credentials, route codes, or sign-in codes. For an incident affecting a particular installation, also contact its deployment owner.
+- **Use HTTPS everywhere** except on your own computer. Sign-in cookies only work over HTTPS (or `localhost`).
+- **Give the organiser and volunteer sides separate addresses**, and set `ALLOWED_HOSTS` to exactly those names.
+- **Tell the app who your proxy is.** Set `FORWARDED_ALLOW_IPS` to your reverse proxy's address so rate limits see real visitors rather than the proxy. Never use `*` on a server the internet can reach.
+- **Make sure your proxy passes the original scheme** (`https`), or the app will reject form submissions as cross-site.
+- **Keep the database private.** If it's on another machine, use `*_SSLMODE=verify-full` with a trusted certificate.
+- **Consider restricting the organiser side** to known people, for example behind a VPN or login gateway.
+
+What the app already does for you:
+
+- Cookies are `Secure`, `HttpOnly` and `SameSite=Lax`. Sessions last twelve hours. Signing out ends the session. Removing an organiser from `users` ends their access straight away.
+- Every change must come from the app's own pages (matching `Origin` or `Referer`). Pages can't be embedded in other sites, scripts are locked down by a Content Security Policy, and private pages aren't cached.
+- Volunteers can only see and record visits on the route their code is for, checked on every request.
+- Only global organisers can change the survey. Regional and area organisers only see their own routes and exports.
+- Each part of the app logs in to the database with only what it needs. The volunteer app can add answers but can't read them back. Exports are read-only. The volunteer app never gets the export login or the route-code key.
+
+## Housekeeping
+
+- Back up both databases, keep them on encrypted storage, and rotate passwords now and then.
+- Run a scheduled job, using a database admin login (not the app's), to remove expired sessions, sign-in codes older than a day, and `email_auth_limits` rows whose `resets_at` is more than a day old.
+- Remove survey answers and resident lists once you no longer need them.
+- Keep `.env`, exported CSVs, database dumps, email passwords, route codes and real resident data out of git and out of public issues.
+- Don't log request bodies or cookies at your proxy.
+- Check dependencies regularly with `pip-audit` and keep them up to date.
+
+## Reporting a problem
+
+If you find a security issue, please email [resea@tuta.io](mailto:resea@tuta.io) privately rather than opening a public issue. Let us know the version, the steps to reproduce it using made-up data, and what you think the impact is. Please don't include real resident data, passwords, route codes or sign-in codes.
+
+If the problem affects a particular installation, please tell whoever runs it too.

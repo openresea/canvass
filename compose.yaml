@@ -34,6 +34,7 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
       ROUTE_CODE_FERNET_KEY: ${ROUTE_CODE_FERNET_KEY:?Missing route-code encryption key}
       OPS_DB_HOST: db
       OPS_DB_NAME: canvass_ops
@@ -63,6 +64,7 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
       OPS_DB_HOST: db
       OPS_DB_NAME: canvass_ops
       OPS_DB_USER: ops_canvasser

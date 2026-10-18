@@ -159,11 +159,11 @@ function escHtml(v) {
 }
 
 function responseErrorMessage(status) {
-  if (status === 401) return "Authentication required.";
-  if (status === 403) return "Access denied.";
-  if (status === 409) return "Request conflict. Please reload and try again.";
-  if (status >= 500) return "Server error. Please try again.";
-  return "Request failed.";
+  if (status === 401) return "Your session has ended. Please sign in again.";
+  if (status === 403) return "Sorry, you don't have access to that.";
+  if (status === 409) return "Things changed while you were working. Please reload and try again.";
+  if (status >= 500) return "Sorry, something went wrong on our side. Please try again.";
+  return "Something went wrong there. Please try again.";
 }
 
 async function apiGet(url) {
@@ -292,14 +292,14 @@ async function loadSurvey() {
     }
     container.append(field);
   });
-  document.getElementById('surveyNotice').textContent = survey.questions.length ? '' : 'No survey questions have been set. You can still record a visit outcome and notes.';
+  document.getElementById('surveyNotice').textContent = survey.questions.length ? '' : 'There are no survey questions yet. You can still record how the visit went and add notes.';
   pendingSubmissionId = '';
   updateSubmitState();
 }
 document.getElementById('reloadSurvey').addEventListener('click', async () => {
   try {
     await loadSurvey();
-    setMsg('submitMsg', 'Questions reloaded. Review your answers before saving.');
+    setMsg('submitMsg', 'Questions reloaded. Have a quick look over your answers before saving.');
   } catch (e) {
     setMsg('submitMsg', e.message, 'error');
   }
@@ -468,7 +468,7 @@ function addManualUnit(unitLabel) {
   pendingSubmissionId = "";
   renderUnitOptions();
   renderPeopleOptions();
-  setMsg("flatMsg", "Flat/house added. Now choose or add a name.", "ok");
+  setMsg("flatMsg", "Added. Now choose or add a name.", "ok");
 }
 
 function selectFlatById(flatId) {
@@ -497,7 +497,7 @@ async function createAndSelectFlat(unitLabel, residentName) {
     setMsg("flatMsg", "");
   } catch (e) {
     void(e);
-    setMsg("flatMsg", "Could not add person. Please try again.", "error");
+    setMsg("flatMsg", "We couldn't add that person. Please try again.", "error");
   }
 }
 
@@ -514,10 +514,10 @@ function resetAfterSubmit() {
 document.getElementById("reloadAddrsBtn").addEventListener("click", async () => {
   try {
     await loadAddresses();
-    setMsg("addrMsg", "Reloaded.", "ok");
+    setMsg("addrMsg", "Addresses are up to date.", "ok");
   } catch (e) {
     void(e);
-    setMsg("addrMsg", "Reload failed. Please try again.", "error");
+    setMsg("addrMsg", "We couldn't refresh the addresses. Please try again.", "error");
   }
 });
 
@@ -558,7 +558,7 @@ document.getElementById("houseSelect").addEventListener("change", async (e) => {
       setPersonControlsEnabled(true);
     } catch (e) {
       void(e);
-      setMsg("flatMsg", "Could not load people. Please try again.", "error");
+      setMsg("flatMsg", "We couldn't load the people at this address. Please try again.", "error");
     }
   }
 });
@@ -606,7 +606,7 @@ document.getElementById("addPersonBtn").addEventListener("click", async () => {
     return;
   }
   if (!name) {
-    setMsg("flatMsg", "Enter a name first.", "error");
+    setMsg("flatMsg", "Please type a name first.", "error");
     return;
   }
   await createAndSelectFlat(selectedUnitLabel, name);
@@ -625,7 +625,7 @@ document.getElementById("toggleManualStreet").addEventListener("click", () => {
 document.getElementById("useStreetBtn").addEventListener("click", () => {
   const street = document.getElementById("manualStreetName").value.trim();
   if (!street) {
-    setMsg("addrMsg", "Enter a street name.", "error");
+    setMsg("addrMsg", "Please type a street name.", "error");
     return;
   }
   selectedStreetName = street;
@@ -673,7 +673,7 @@ document.getElementById("addAddrBtn").addEventListener("click", async () => {
     return;
   }
   if (!house) {
-    setMsg("addrAddMsg", "Enter a house or building.", "error");
+    setMsg("addrAddMsg", "Please type a house number or name.", "error");
     return;
   }
   try {
@@ -697,10 +697,10 @@ document.getElementById("addAddrBtn").addEventListener("click", async () => {
     document.getElementById("manualAddrSection").style.display = "none";
     document.getElementById("manualHouseNum").value = "";
     setMsg("addrAddMsg", "");
-    setMsg("addrMsg", "Address added.", "ok");
+    setMsg("addrMsg", "Address added to your route.", "ok");
   } catch (e) {
     void(e);
-    setMsg("addrAddMsg", "Could not add address. Please try again.", "error");
+    setMsg("addrAddMsg", "We couldn't add that address. Please try again.", "error");
   }
 });
 
@@ -712,7 +712,7 @@ document.getElementById("toggleManualFlat").addEventListener("click", () => {
 document.getElementById("addFlatBtn").addEventListener("click", async () => {
   const flatNum = document.getElementById("manualFlatNum").value.trim();
   if (!flatNum) {
-    setMsg("flatMsg", "Enter a flat or unit number.", "error");
+    setMsg("flatMsg", "Please type a flat or unit number.", "error");
     return;
   }
   addManualUnit(flatNum);
@@ -728,7 +728,7 @@ document.getElementById("toggleManualPerson").addEventListener("click", () => {
 document.getElementById("submitBtn").addEventListener("click", async () => {
   const submitBtn = document.getElementById("submitBtn");
   if (!selectedFlatId) {
-    setMsg("submitMsg", "Select a person first.", "error");
+    setMsg("submitMsg", "Choose who you visited first.", "error");
     return;
   }
   if (!survey || submitting) return;
@@ -753,7 +753,7 @@ document.getElementById("submitBtn").addEventListener("click", async () => {
     document.getElementById("personSelect").focus({preventScroll:true});
   } catch (e) {
     void(e);
-    setMsg("submitMsg", e.message || "Could not save. Your answers are still here. Please retry.", "error");
+    setMsg("submitMsg", e.message || "We couldn't save that. Your answers are still here, so just try again.", "error");
   } finally {
     submitting = false;
     updateSubmitState();
@@ -775,12 +775,11 @@ document.querySelectorAll('[aria-controls]').forEach(button => button.addEventLi
 }));
 (async () => {
   try {
-    await apiGet(`/api/me?route_id=${encodeURIComponent(routeId)}`);
     await loadSurvey();
     await loadAddresses();
   } catch (e) {
     void(e);
-    setMsg("addrMsg", e.message || "Could not load your route. Try refreshing the addresses, or sign in again.", "error");
+    setMsg("addrMsg", e.message || "We couldn't load your route. Try refreshing, or sign in again.", "error");
   }
 })();
 </script>

@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 from fastapi import HTTPException
+
 from app.common import email_auth
 from app.common.db import POOLS
 
@@ -13,11 +15,6 @@ def inbox(monkeypatch):
         "send_code",
         lambda email, code, purpose: messages.append((email, code, purpose)),
     )
-    from app.admin.main import _admin_login_limiter
-    from app.canvasser.main import _join_limiter
-
-    _admin_login_limiter._hits.clear()
-    _join_limiter._hits.clear()
     return messages
 
 
@@ -109,12 +106,12 @@ def test_code_bound_to_email_and_purpose(db, inbox):
         **body,
         "email": "someone-else@example.test",
         "display_name": "Helper",
-        "route_code": "sample-route-code",
+        "route_code": db.route_code,
     }
     assert db.canvasser.post("/api/join", json=wrong).status_code == 401
     r = db.canvasser.post(
         "/api/join",
-        json={**body, "display_name": "Helper", "route_code": "sample-route-code"},
+        json={**body, "display_name": "Helper", "route_code": db.route_code},
     )
     assert r.status_code == 200, r.text
     assert r.json()["route_id"] == "test-route"
@@ -125,7 +122,7 @@ def test_concurrent_verification_consumes_exactly_once(db, inbox):
 
     def attempt():
         try:
-            email_auth.verify_code(body, "admin", "concurrent-test")
+            email_auth.verify_code(body, "admin")
             return True
         except HTTPException:
             return False
@@ -155,3 +152,13 @@ def test_signin_pages_have_no_external_identity_scripts(db):
         assert "Email me a sign-in code" in page.text
         assert "accounts.google.com" not in page.text
         assert "connect-src 'self';" in page.headers["content-security-policy"]
+
+
+def test_join_only_checks_codes_for_the_named_route(db, inbox):
+    body = request(db, inbox, "canvasser", "helper@example.test")
+    for code in ["other-route-SAMPLE2345", "no-hyphen", db.route_code + "X"]:
+        r = db.canvasser.post(
+            "/api/join", json={**body, "display_name": "Helper", "route_code": code}
+        )
+        assert r.status_code == 403
+        assert "route code didn't work" in r.json()["detail"]

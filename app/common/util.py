@@ -1,7 +1,7 @@
-from typing import Any, Optional
+from typing import Any
 
 
-def fetchone_dict(cur) -> Optional[dict[str, Any]]:
+def fetchone_dict(cur) -> dict[str, Any] | None:
     row = cur.fetchone()
     if row is None:
         return None

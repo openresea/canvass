@@ -163,13 +163,12 @@ Resea Canvass <span class="hd-badge">Workspace</span>
 <th>Postcode</th>
 <th>Units</th>
 <th>Answered</th>
-<th>In progress</th>
 <th>Unvisited</th>
 </tr>
 </thead>
 <tbody id="addressesTableBody">
 <tr>
-<td colspan="10" class="small">Choose a route above to see its addresses.</td>
+<td colspan="9" class="small">Choose a route above to see its addresses.</td>
 </tr>
 </tbody>
 </table>
@@ -182,9 +181,7 @@ Resea Canvass <span class="hd-badge">Workspace</span>
 <label for="exportRouteId">Route ID (optional)</label>
 <input id="exportRouteId" placeholder="Leave blank for all accessible routes">
 <div class="export-grid">
-<a data-export="/admin/routes/export.csv" href="/admin/routes/export.csv" download>↓ Routes<small>Addresses and route details</small>
-</a>
-<a data-export="/admin/codes/export.csv" href="/admin/codes/export.csv" download>↓ Join codes<small>Access codes and expiry</small>
+<a data-export="/admin/routes/export.csv" href="/admin/routes/export.csv" download>↓ Routes<small>Route details</small>
 </a>
 <a data-export="/admin/statuses/export.csv" href="/admin/statuses/export.csv" download>↓ Visit progress<small>Status of each doorstep</small>
 </a>
@@ -214,17 +211,17 @@ function responseErrorMessage(status, text) {
     const data = JSON.parse(text || "{}");
     if (data && typeof data.detail === "string" && data.detail.trim()) return data.detail.trim();
   } catch (_) {}
-  if (status === 401) return "Authentication required.";
-  if (status === 403) return "Access denied.";
-  if (status >= 500) return "Server error. Please try again.";
-  return "Request failed.";
+  if (status === 401) return "Please sign in again.";
+  if (status === 403) return "Sorry, you don't have access to that.";
+  if (status >= 500) return "Sorry, something went wrong on our side. Please try again.";
+  return "Something went wrong there. Please try again.";
 }
 
 function parseJsonOrThrow(text) {
   try {
     return JSON.parse(text);
   } catch (_) {
-    throw new Error("Invalid server response");
+    throw new Error("We got an unexpected reply from the server. Please try again.");
   }
 }
 
@@ -265,8 +262,8 @@ function setCodesSummary(routeId, codes) {
   const expired = codes.filter(c => c.status === "expired").length;
   const revoked = codes.filter(c => c.status === "revoked").length;
   el.textContent = routeId ?
-    `Route ${routeId}: ${codes.length} code(s) shown. ${working} working, ${expired} expired, ${revoked} revoked.` :
-    `${codes.length} code(s) shown across accessible routes. ${working} working, ${expired} expired, ${revoked} revoked.`;
+    `Route ${routeId}: ${working} working, ${expired} expired, ${revoked} revoked.` :
+    `All your routes: ${working} working, ${expired} expired, ${revoked} revoked.`;
 }
 
 function resetCodesTable(message) {
@@ -276,7 +273,7 @@ function resetCodesTable(message) {
 function renderCodesTable(codes) {
   const body = document.getElementById("codesTableBody");
   if (!codes || !codes.length) {
-    resetCodesTable("No join codes yet. Import a route above or generate a code for an existing route.");
+    resetCodesTable("No join codes yet. Import a route above and we'll make one for you.");
     return;
   }
   body.innerHTML = codes.map(c => `
@@ -313,7 +310,7 @@ function renderCodesTable(codes) {
 function renderAddressesTable(addresses) {
   const body = document.getElementById("addressesTableBody");
   if (!addresses || !addresses.length) {
-    body.innerHTML = '<tr><td colspan="10" class="small">No addresses found for this route.</td></tr>';
+    body.innerHTML = '<tr><td colspan="9" class="small">No addresses found for this route.</td></tr>';
     return;
   }
   body.innerHTML = addresses.map(a => `
@@ -326,7 +323,6 @@ function renderAddressesTable(addresses) {
       <td>${escHtml(fmtCell(a.postcode))}</td>
       <td>${escHtml(fmtCell(a.flats_total))}</td>
       <td>${escHtml(fmtCell(a.flats_answered))}</td>
-      <td>${escHtml(fmtCell(a.flats_in_progress))}</td>
       <td>${escHtml(fmtCell(a.flats_unvisited))}</td>
     </tr>
   `).join("");
@@ -338,7 +334,7 @@ async function loadRouteCodes(routeOverride, opts) {
   if (!route_id) {
     return loadAllRouteCodes(opts);
   }
-  if (!quiet) setText("msg", "Loading route codes...", "");
+  if (!quiet) setText("msg", "Loading codes…", "");
   try {
     const r = await fetch(`/admin/routes/${encodeURIComponent(route_id)}/codes`, {
       method: "GET",
@@ -352,14 +348,14 @@ async function loadRouteCodes(routeOverride, opts) {
     if (!quiet) setText("msg", "OK", "okText");
   } catch (err) {
     setCodesSummary(route_id, []);
-    resetCodesTable("Unable to load codes for this route.");
+    resetCodesTable("We couldn't load the codes for this route.");
     if (!quiet) setText("msg", "ERROR: " + err.message, "errorText");
   }
 }
 
 async function loadAllRouteCodes(opts) {
   const quiet = !!(opts && opts.quiet);
-  if (!quiet) setText("msg", "Loading all route codes...", "");
+  if (!quiet) setText("msg", "Loading codes…", "");
   try {
     const r = await fetch("/admin/routes/codes?limit=2000", {
       method: "GET",
@@ -373,7 +369,7 @@ async function loadAllRouteCodes(opts) {
     if (!quiet) setText("msg", "OK", "okText");
   } catch (err) {
     setCodesSummary("", []);
-    resetCodesTable("Unable to load route codes.");
+    resetCodesTable("We couldn't load your codes.");
     if (!quiet) setText("msg", "ERROR: " + err.message, "errorText");
   }
 }
@@ -382,8 +378,8 @@ async function generateRouteCode(routeId, opts) {
   const route_id = routeId || document.getElementById("route_id").value.trim();
   const quiet = !!(opts && opts.quiet);
   const ttl_hours = (document.getElementById("ttl_hours").value || "").trim() || "24";
-  if (!route_id) throw new Error("Route ID is required.");
-  if (!quiet) setText("msg", "Generating code...", "");
+  if (!route_id) throw new Error("Enter a route ID first.");
+  if (!quiet) setText("msg", "Making a new code…", "");
   const r = await fetch(`/admin/routes/${encodeURIComponent(route_id)}/codes/generate?n=1&ttl_hours=${encodeURIComponent(ttl_hours)}`, {
     method: "POST",
     credentials: "include"
@@ -395,14 +391,14 @@ async function generateRouteCode(routeId, opts) {
     quiet: true
   });
   if (!quiet) {
-    setText("msg", `OK: created ${Number(data.generated || 0)} code for ${data.route_id} for ${data.ttl_hours} hour(s).`, "okText");
+    setText("msg", `Done! New code for ${data.route_id}, valid for ${data.ttl_hours} hour${data.ttl_hours === 1 ? "" : "s"}.`, "okText");
   }
   return data;
 }
 
 async function extendCode(routeId, codePlain) {
   const ttl_hours = Number((document.getElementById("ttl_hours").value || "").trim() || "24");
-  setText("msg", "Extending code...", "");
+  setText("msg", "Extending the code…", "");
   try {
     const r = await fetch(`/admin/routes/${encodeURIComponent(routeId)}/codes/extend`, {
       method: "POST",
@@ -420,15 +416,15 @@ async function extendCode(routeId, codePlain) {
     await loadRouteCodes(routeId, {
       quiet: true
     });
-    setText("msg", `OK: extended code for ${routeId} by ${ttl_hours} hour(s).`, "okText");
+    setText("msg", `Done! The code now lasts ${ttl_hours} more hour${ttl_hours === 1 ? "" : "s"}.`, "okText");
   } catch (err) {
     setText("msg", "ERROR: " + err.message, "errorText");
   }
 }
 
 async function revokeCode(routeId, codePlain) {
-  if (!confirm("Revoke this join code? People using it will lose route access.")) return;
-  setText("msg", "Revoking code...", "");
+  if (!confirm("Revoke this code? Anyone signed in with it will be signed out of the route.")) return;
+  setText("msg", "Revoking the code…", "");
   try {
     const r = await fetch(`/admin/routes/${encodeURIComponent(routeId)}/codes/revoke`, {
       method: "POST",
@@ -445,7 +441,7 @@ async function revokeCode(routeId, codePlain) {
     await loadRouteCodes(routeId, {
       quiet: true
     });
-    setText("msg", `OK: revoked code for ${routeId}.`, "okText");
+    setText("msg", "Done. That code no longer works.", "okText");
   } catch (err) {
     setText("msg", "ERROR: " + err.message, "errorText");
   }
@@ -454,10 +450,10 @@ async function revokeCode(routeId, codePlain) {
 async function loadRouteAddresses() {
   const route_id = document.getElementById("addressRouteId").value.trim();
   if (!route_id) {
-    setText("addressesMsg", "Route ID is required.", "errorText");
+    setText("addressesMsg", "Enter a route ID first.", "errorText");
     return;
   }
-  setText("addressesMsg", "Loading addresses...", "");
+  setText("addressesMsg", "Loading addresses…", "");
   try {
     const r = await fetch(`/admin/routes/${encodeURIComponent(route_id)}/addresses?limit=5000`, {
       method: "GET",
@@ -467,7 +463,7 @@ async function loadRouteAddresses() {
     if (!r.ok) throw new Error(responseErrorMessage(r.status, t));
     const data = parseJsonOrThrow(t);
     renderAddressesTable(data.addresses || []);
-    setText("addressesMsg", `OK: ${Number(data.count || 0)} address(es) loaded for ${route_id}.`, "okText");
+    setText("addressesMsg", `${Number(data.count || 0)} address${data.count === 1 ? "" : "es"} on ${route_id}.`, "okText");
   } catch (err) {
     setText("addressesMsg", "ERROR: " + err.message, "errorText");
   }
@@ -480,10 +476,10 @@ document.getElementById("uploadForm").addEventListener("submit", async (e) => {
   const fileInput = document.getElementById("routesFile");
   const file = fileInput.files && fileInput.files[0];
   if (!areaId || !file) {
-    setText("uploadMsg", "Area ID and CSV file are required.", "errorText");
+    setText("uploadMsg", "Please enter an area ID and choose a CSV file.", "errorText");
     return;
   }
-  setText("uploadMsg", "Uploading route...", "");
+  setText("uploadMsg", "Importing your route…", "");
   try {
     const form = new FormData();
     form.append("file", file);
@@ -497,16 +493,16 @@ document.getElementById("uploadForm").addEventListener("submit", async (e) => {
     if (!r.ok) throw new Error(responseErrorMessage(r.status, t));
     const data = parseJsonOrThrow(t);
     const routeId = (data.route_id || "").trim();
-    if (!routeId) throw new Error("Upload succeeded but no route_id was returned");
+    if (!routeId) throw new Error("The import finished but we didn't get a route back. Please refresh and check.");
     document.getElementById("route_id").value = routeId;
     document.getElementById("addressRouteId").value = routeId;
-    setText("uploadMsg", `Route uploaded: ${routeId}. Creating route code...`, "");
+    setText("uploadMsg", `Route ${routeId} imported. Making a join code…`, "");
     await generateRouteCode(routeId, {
       quiet: true
     });
     setText(
       "uploadMsg",
-      `OK: ${routeId} uploaded (${Number(data.inserted_addresses || 0)} address(es), ${Number(data.inserted_flats || 0)} person/flat row(s), ${Number(data.skipped || 0)} skipped). 1 route code created.`,
+      `All set! ${routeId} has ${Number(data.inserted_addresses || 0)} addresses and ${Number(data.named_residents || 0)} named residents${data.skipped ? ` (${Number(data.skipped)} rows had no street and were skipped)` : ""}. Your join code is in the list below.`,
       "okText"
     );
   } catch (err) {
