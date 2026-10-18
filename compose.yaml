@@ -1,0 +1,79 @@
+name: canvass
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run python scripts/configure.py first}
+      OPS_ADMIN_PASSWORD: ${OPS_ADMIN_PASSWORD:?Missing database password}
+      OPS_CANVASSER_PASSWORD: ${OPS_CANVASSER_PASSWORD:?Missing database password}
+      ANSWERS_ADMIN_PASSWORD: ${ANSWERS_ADMIN_PASSWORD:?Missing database password}
+      ANSWERS_WRITER_PASSWORD: ${ANSWERS_WRITER_PASSWORD:?Missing database password}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set your admin email}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/docker-init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+      - ./app/sql:/schemas:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U postgres -d canvass_ops']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  admin:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: ['127.0.0.1:8001:8080']
+    environment:
+      APP_MODULE: app.admin.main:app
+      EMAIL_CODE_SECRET: ${EMAIL_CODE_SECRET:?Generate a fresh email code secret}
+      SMTP_HOST: ${SMTP_HOST:?Configure your mail provider}
+      SMTP_FROM: ${SMTP_FROM:?Configure your sender email}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      ROUTE_CODE_FERNET_KEY: ${ROUTE_CODE_FERNET_KEY:?Missing route-code encryption key}
+      OPS_DB_HOST: db
+      OPS_DB_NAME: canvass_ops
+      OPS_DB_USER: ops_admin
+      OPS_DB_PASS: ${OPS_ADMIN_PASSWORD}
+      ANSWERS_DB_ADMIN_HOST: db
+      ANSWERS_DB_ADMIN_NAME: canvass_answers
+      ANSWERS_DB_ADMIN_USER: answers_admin
+      ANSWERS_DB_ADMIN_PASS: ${ANSWERS_ADMIN_PASSWORD}
+    read_only: true
+    tmpfs: ['/tmp:size=16m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+  canvasser:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: ['127.0.0.1:8000:8080']
+    environment:
+      APP_MODULE: app.canvasser.main:app
+      EMAIL_CODE_SECRET: ${EMAIL_CODE_SECRET:?Generate a fresh email code secret}
+      SMTP_HOST: ${SMTP_HOST:?Configure your mail provider}
+      SMTP_FROM: ${SMTP_FROM:?Configure your sender email}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      OPS_DB_HOST: db
+      OPS_DB_NAME: canvass_ops
+      OPS_DB_USER: ops_canvasser
+      OPS_DB_PASS: ${OPS_CANVASSER_PASSWORD}
+      ANSWERS_DB_WRITE_HOST: db
+      ANSWERS_DB_WRITE_NAME: canvass_answers
+      ANSWERS_DB_WRITE_USER: answers_writer
+      ANSWERS_DB_WRITE_PASS: ${ANSWERS_WRITER_PASSWORD}
+    read_only: true
+    tmpfs: ['/tmp:size=16m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+volumes:
+  postgres-data:

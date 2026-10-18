@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Administration · Resea Canvass</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="app-header">
+<div class="brand">
+Resea Canvass <span class="hd-badge">Workspace</span>
+</div>
+<div class="account">
+<span class="account-email">{{ user.email }}</span>
+<button id="logoutBtn" class="btn-logout" type="button">Sign out</button>
+</div>
+</header>
+<main id="main" class="page-shell">
+<div class="page-intro">
+<div>
+<span class="eyebrow">Administration</span>
+<h1>Manage routes</h1>
+<p>Import addresses, issue route codes, and export responses.</p>
+</div>
+<span class="badge">Administration</span>
+</div>
+<nav class="workspace-nav" aria-label="Workspace">
+<a href="#routes">Import routes</a>
+<a href="#codes">Join codes</a>
+<a href="#addresses">Addresses</a>
+<a href="#exports">Exports</a>{% if user.role == 'GLOBAL_ADMIN' %}<a href="/admin/survey">Survey questions ↗</a>{% endif %}</nav>
+{% if user.role == 'GLOBAL_ADMIN' %}<section class="card hero-card">
+<div>
+<span class="eyebrow">Survey setup</span>
+<h2>Set your survey questions</h2>
+<p>Add or edit the questions canvassers will ask. Earlier responses keep their original questions.</p>
+</div>
+<a class="button" href="/admin/survey">Manage survey questions →</a>
+</section>{% endif %}
+<div class="setup-grid">
+<a class="setup-item" href="#routes">
+<span class="step-number">1</span>
+<strong>Prepare a route</strong>
+<p>Import the addresses your team will visit.</p>
+</a>
+<a class="setup-item" href="#codes">
+<span class="step-number">2</span>
+<strong>Share a join code</strong>
+<p>Give your canvassers access to their route.</p>
+</a>
+<a class="setup-item" href="#exports">
+<span class="step-number">3</span>
+<strong>Export results</strong>
+<p>Download your team’s progress and responses.</p>
+</a>
+</div>
+<section class="card" id="routes">
+<div class="section-head">
+<div>
+<span class="eyebrow">01 · Prepare your route</span>
+<h2>Import addresses</h2>
+<p class="small">Upload your route CSV. We’ll create a join code for your team automatically.</p>
+</div>
+</div>
+<form id="uploadForm">
+<div class="form-grid">
+<div>
+<label for="area_id">Area ID</label>
+<input id="area_id" placeholder="e.g. LOCAL_CENTRAL" required>
+<p class="small" style="margin-top:6px">Use an area you have access to.</p>
+</div>
+<div>
+<label for="upload_route_number">Walk number (optional)</label>
+<input id="upload_route_number" type="number" placeholder="e.g. 1">
+</div>
+</div>
+<label for="routesFile">Route CSV</label>
+<input id="routesFile" type="file" name="file" accept=".csv" required>
+<button type="submit" style="margin-top:18px">Import route &amp; create code</button>
+<p id="uploadMsg" class="small" role="status" aria-live="polite"></p>
+</form>
+</section>
+<section class="card" id="codes">
+<div class="section-head">
+<div>
+<span class="eyebrow">02 · Give your team access</span>
+<h2>Route join codes</h2>
+<p class="small">Share an active code with your team. They’ll enter it when they sign in.</p>
+</div>
+</div>
+<form id="genForm">
+<div class="form-grid">
+<div>
+<label for="route_id">Route ID</label>
+<input id="route_id" placeholder="e.g. R001">
+<p class="small" style="margin-top:6px">Required for a new code. Leave blank to view all routes.</p>
+</div>
+<div>
+<label for="ttl_hours">Code valid for</label>
+<div class="suffixField">
+<input id="ttl_hours" type="number" min="1" max="720" value="24" required>
+<span class="small">hours</span>
+</div>
+<p class="small" style="margin-top:6px">Also used when extending an existing code.</p>
+</div>
+</div>
+<div class="actions">
+<button type="submit">Generate new code</button>
+<button id="filterCodes" type="button" class="secondary">Refresh code list</button>
+</div>
+<p id="msg" class="small" role="status" aria-live="polite"></p>
+</form>
+<p id="codesSummary" class="small" style="margin-top:20px">
+</p>
+<div class="codeTableWrap" tabindex="0" aria-label="Route join codes">
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Walk</th>
+<th>Join code</th>
+<th>Status</th>
+<th>Expires</th>
+<th>Created</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="codesTableBody">
+<tr>
+<td colspan="7" class="small">Loading route codes…</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section class="card" id="addresses">
+<div class="section-head">
+<div>
+<span class="eyebrow">Follow your team’s progress</span>
+<h2>Walk addresses</h2>
+<p class="small">View the addresses and visit progress for a route.</p>
+</div>
+</div>
+<label for="addressRouteId">Route ID</label>
+<div class="row">
+<div>
+<input id="addressRouteId" placeholder="e.g. R001">
+</div>
+<button id="loadAddressesBtn" type="button">Show addresses</button>
+</div>
+<p id="addressesMsg" class="small" role="status" aria-live="polite"></p>
+<div class="tableWrap" tabindex="0" aria-label="Walk addresses">
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Walk</th>
+<th>Address</th>
+<th>Street</th>
+<th>House</th>
+<th>Postcode</th>
+<th>Units</th>
+<th>Answered</th>
+<th>In progress</th>
+<th>Unvisited</th>
+</tr>
+</thead>
+<tbody id="addressesTableBody">
+<tr>
+<td colspan="10" class="small">Choose a route above to see its addresses.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section class="card" id="exports">
+<span class="eyebrow">03 · Export responses</span>
+<h2>Download your data</h2>
+<p class="small">Export all routes you can access, or enter a route ID to narrow the download.</p>
+<label for="exportRouteId">Route ID (optional)</label>
+<input id="exportRouteId" placeholder="Leave blank for all accessible routes">
+<div class="export-grid">
+<a data-export="/admin/routes/export.csv" href="/admin/routes/export.csv" download>↓ Routes<small>Addresses and route details</small>
+</a>
+<a data-export="/admin/codes/export.csv" href="/admin/codes/export.csv" download>↓ Join codes<small>Access codes and expiry</small>
+</a>
+<a data-export="/admin/statuses/export.csv" href="/admin/statuses/export.csv" download>↓ Visit progress<small>Status of each doorstep</small>
+</a>
+<a data-export="/admin/answers/export.csv" href="/admin/answers/export.csv" download>↓ Survey answers<small>Responses and notes</small>
+</a>
+</div>
+</section>
+</main>
+<script nonce="{{ request.state.csp_nonce }}">
+function setText(id, text, kind) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = kind ? `small ${kind}` : "small";
+}
+
+function escHtml(v) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function responseErrorMessage(status, text) {
+  try {
+    const data = JSON.parse(text || "{}");
+    if (data && typeof data.detail === "string" && data.detail.trim()) return data.detail.trim();
+  } catch (_) {}
+  if (status === 401) return "Authentication required.";
+  if (status === 403) return "Access denied.";
+  if (status >= 500) return "Server error. Please try again.";
+  return "Request failed.";
+}
+
+function parseJsonOrThrow(text) {
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    throw new Error("Invalid server response");
+  }
+}
+
+function fmtCell(v) {
+  if (v === null || v === undefined) return "";
+  return String(v);
+}
+
+function fmtDateTime(v) {
+  if (v === null || v === undefined || v === "") return "";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function codeStatusLabel(status) {
+  if (status === "working") return "Working";
+  if (status === "expired") return "Expired";
+  if (status === "revoked") return "Revoked";
+  return fmtCell(status);
+}
+
+function codeStatusClass(status) {
+  if (status === "working") return "statusTag statusWorking";
+  if (status === "expired") return "statusTag statusExpired";
+  return "statusTag statusRevoked";
+}
+
+function setCodesSummary(routeId, codes) {
+  const el = document.getElementById("codesSummary");
+  const working = codes.filter(c => c.status === "working").length;
+  const expired = codes.filter(c => c.status === "expired").length;
+  const revoked = codes.filter(c => c.status === "revoked").length;
+  el.textContent = routeId ?
+    `Route ${routeId}: ${codes.length} code(s) shown. ${working} working, ${expired} expired, ${revoked} revoked.` :
+    `${codes.length} code(s) shown across accessible routes. ${working} working, ${expired} expired, ${revoked} revoked.`;
+}
+
+function resetCodesTable(message) {
+  document.getElementById("codesTableBody").innerHTML = `<tr><td colspan="7" class="small">${escHtml(message)}</td></tr>`;
+}
+
+function renderCodesTable(codes) {
+  const body = document.getElementById("codesTableBody");
+  if (!codes || !codes.length) {
+    resetCodesTable("No join codes yet. Import a route above or generate a code for an existing route.");
+    return;
+  }
+  body.innerHTML = codes.map(c => `
+    <tr>
+      <td>${escHtml(fmtCell(c.route_id))}</td>
+      <td>${escHtml(fmtCell(c.route_number))}</td>
+      <td><code>${escHtml(fmtCell(c.code_plain))}</code></td>
+      <td><span class="${escHtml(codeStatusClass(c.status))}">${escHtml(codeStatusLabel(c.status))}</span></td>
+      <td>${escHtml(fmtDateTime(c.expires_at))}</td>
+      <td>${escHtml(fmtDateTime(c.created_at))}</td>
+      <td>
+        <div class="rowActions">
+          <button
+            type="button"
+            data-action="extend-code"
+            data-route="${escHtml(fmtCell(c.route_id))}"
+            data-code="${escHtml(fmtCell(c.code_plain))}"
+            ${c.status === "revoked" ? "disabled" : ""}
+          >Extend</button>
+          <button
+            type="button"
+            class="btnDanger"
+            data-action="revoke-code"
+            data-route="${escHtml(fmtCell(c.route_id))}"
+            data-code="${escHtml(fmtCell(c.code_plain))}"
+            ${c.status === "revoked" ? "disabled" : ""}
+          >Revoke</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function renderAddressesTable(addresses) {
+  const body = document.getElementById("addressesTableBody");
+  if (!addresses || !addresses.length) {
+    body.innerHTML = '<tr><td colspan="10" class="small">No addresses found for this route.</td></tr>';
+    return;
+  }
+  body.innerHTML = addresses.map(a => `
+    <tr>
+      <td>${escHtml(fmtCell(a.route_id))}</td>
+      <td>${escHtml(fmtCell(a.route_number))}</td>
+      <td>${escHtml(fmtCell(a.full_address))}</td>
+      <td>${escHtml(fmtCell(a.street))}</td>
+      <td>${escHtml(fmtCell(a.house))}</td>
+      <td>${escHtml(fmtCell(a.postcode))}</td>
+      <td>${escHtml(fmtCell(a.flats_total))}</td>
+      <td>${escHtml(fmtCell(a.flats_answered))}</td>
+      <td>${escHtml(fmtCell(a.flats_in_progress))}</td>
+      <td>${escHtml(fmtCell(a.flats_unvisited))}</td>
+    </tr>
+  `).join("");
+}
+
+async function loadRouteCodes(routeOverride, opts) {
+  const route_id = routeOverride || document.getElementById("route_id").value.trim();
+  const quiet = !!(opts && opts.quiet);
+  if (!route_id) {
+    return loadAllRouteCodes(opts);
+  }
+  if (!quiet) setText("msg", "Loading route codes...", "");
+  try {
+    const r = await fetch(`/admin/routes/${encodeURIComponent(route_id)}/codes`, {
+      method: "GET",
+      credentials: "include"
+    });
+    const t = await r.text();
+    if (!r.ok) throw new Error(responseErrorMessage(r.status, t));
+    const data = parseJsonOrThrow(t);
+    renderCodesTable(data.codes || []);
+    setCodesSummary(route_id, data.codes || []);
+    if (!quiet) setText("msg", "OK", "okText");
+  } catch (err) {
+    setCodesSummary(route_id, []);
+    resetCodesTable("Unable to load codes for this route.");
+    if (!quiet) setText("msg", "ERROR: " + err.message, "errorText");
+  }
+}
+
+async function loadAllRouteCodes(opts) {
+  const quiet = !!(opts && opts.quiet);
+  if (!quiet) setText("msg", "Loading all route codes...", "");
+  try {
+    const r = await fetch("/admin/routes/codes?limit=2000", {
+      method: "GET",
+      credentials: "include"
+    });
+    const t = await r.text();
+    if (!r.ok) throw new Error(responseErrorMessage(r.status, t));
+    const data = parseJsonOrThrow(t);
+    renderCodesTable(data.codes || []);
+    setCodesSummary("", data.codes || []);
+    if (!quiet) setText("msg", "OK", "okText");
+  } catch (err) {
+    setCodesSummary("", []);
+    resetCodesTable("Unable to load route codes.");
+    if (!quiet) setText("msg", "ERROR: " + err.message, "errorText");
+  }
+}
+
+async function generateRouteCode(routeId, opts) {
+  const route_id = routeId || document.getElementById("route_id").value.trim();
+  const quiet = !!(opts && opts.quiet);
+  const ttl_hours = (document.getElementById("ttl_hours").value || "").trim() || "24";
+  if (!route_id) throw new Error("Route ID is required.");
+  if (!quiet) setText("msg", "Generating code...", "");
+  const r = await fetch(`/admin/routes/${encodeURIComponent(route_id)}/codes/generate?n=1&ttl_hours=${encodeURIComponent(ttl_hours)}`, {
+    method: "POST",
+    credentials: "include"
+  });
+  const t = await r.text();
+  if (!r.ok) throw new Error(responseErrorMessage(r.status, t));
+  const data = parseJsonOrThrow(t);
+  await loadRouteCodes(route_id, {
+    quiet: true
+  });
+  if (!quiet) {
+    setText("msg", `OK: created ${Number(data.generated || 0)} code for ${data.route_id} for ${data.ttl_hours} hour(s).`, "okText");
+  }
+  return data;
+}
+
+async function extendCode(routeId, codePlain) {
+  const ttl_hours = Number((document.getElementById("ttl_hours").value || "").trim() || "24");
+  setText("msg", "Extending code...", "");
+  try {
+    const r = await fetch(`/admin/routes/${encodeURIComponent(routeId)}/codes/extend`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        code_plain: codePlain,
+        ttl_hours
+      })
+    });
+    const t = await r.text();
+    if (!r.ok) throw new Error(responseErrorMessage(r.status, t));
+    await loadRouteCodes(routeId, {
+      quiet: true
+    });
+    setText("msg", `OK: extended code for ${routeId} by ${ttl_hours} hour(s).`, "okText");
+  } catch (err) {
+    setText("msg", "ERROR: " + err.message, "errorText");
+  }
+}
+
+async function revokeCode(routeId, codePlain) {
+  if (!confirm("Revoke this join code? People using it will lose route access.")) return;
+  setText("msg", "Revoking code...", "");
+  try {
+    const r = await fetch(`/admin/routes/${encodeURIComponent(routeId)}/codes/revoke`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        code_plain: codePlain
+      })
+    });
+    const t = await r.text();
+    if (!r.ok) throw new Error(responseErrorMessage(r.status, t));
+    await loadRouteCodes(routeId, {
+      quiet: true
+    });
+    setText("msg", `OK: revoked code for ${routeId}.`, "okText");
+  } catch (err) {
+    setText("msg", "ERROR: " + err.message, "errorText");
+  }
+}
+
+async function loadRouteAddresses() {
+  const route_id = document.getElementById("addressRouteId").value.trim();
+  if (!route_id) {
+    setText("addressesMsg", "Route ID is required.", "errorText");
+    return;
+  }
+  setText("addressesMsg", "Loading addresses...", "");
+  try {
+    const r = await fetch(`/admin/routes/${encodeURIComponent(route_id)}/addresses?limit=5000`, {
+      method: "GET",
+      credentials: "include"
+    });
+    const t = await r.text();
+    if (!r.ok) throw new Error(responseErrorMessage(r.status, t));
+    const data = parseJsonOrThrow(t);
+    renderAddressesTable(data.addresses || []);
+    setText("addressesMsg", `OK: ${Number(data.count || 0)} address(es) loaded for ${route_id}.`, "okText");
+  } catch (err) {
+    setText("addressesMsg", "ERROR: " + err.message, "errorText");
+  }
+}
+
+document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const areaId = document.getElementById("area_id").value.trim();
+  const routeNumberRaw = (document.getElementById("upload_route_number").value || "").trim();
+  const fileInput = document.getElementById("routesFile");
+  const file = fileInput.files && fileInput.files[0];
+  if (!areaId || !file) {
+    setText("uploadMsg", "Area ID and CSV file are required.", "errorText");
+    return;
+  }
+  setText("uploadMsg", "Uploading route...", "");
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    const routeNumberParam = routeNumberRaw ? `&route_number=${encodeURIComponent(routeNumberRaw)}` : "";
+    const r = await fetch(`/admin/routes/upload.csv?area_id=${encodeURIComponent(areaId)}${routeNumberParam}`, {
+      method: "POST",
+      credentials: "include",
+      body: form
+    });
+    const t = await r.text();
+    if (!r.ok) throw new Error(responseErrorMessage(r.status, t));
+    const data = parseJsonOrThrow(t);
+    const routeId = (data.route_id || "").trim();
+    if (!routeId) throw new Error("Upload succeeded but no route_id was returned");
+    document.getElementById("route_id").value = routeId;
+    document.getElementById("addressRouteId").value = routeId;
+    setText("uploadMsg", `Route uploaded: ${routeId}. Creating route code...`, "");
+    await generateRouteCode(routeId, {
+      quiet: true
+    });
+    setText(
+      "uploadMsg",
+      `OK: ${routeId} uploaded (${Number(data.inserted_addresses || 0)} address(es), ${Number(data.inserted_flats || 0)} person/flat row(s), ${Number(data.skipped || 0)} skipped). 1 route code created.`,
+      "okText"
+    );
+  } catch (err) {
+    setText("uploadMsg", "ERROR: " + err.message, "errorText");
+  }
+});
+
+document.getElementById("genForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await generateRouteCode();
+  } catch (err) {
+    setText("msg", "ERROR: " + err.message, "errorText");
+  }
+});
+
+document.getElementById("route_id").addEventListener("change", async (e) => {
+  const routeId = (e.target.value || "").trim();
+  if (!routeId) {
+    await loadAllRouteCodes();
+    return;
+  }
+  await loadRouteCodes(routeId);
+});
+
+document.getElementById("loadAddressesBtn").addEventListener("click", async () => {
+  await loadRouteAddresses();
+});
+
+document.getElementById("codesTableBody").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-action]");
+  if (!btn) return;
+  const action = btn.dataset.action || "";
+  const routeId = btn.dataset.route || "";
+  const codePlain = btn.dataset.code || "";
+  if (!routeId || !codePlain) return;
+  if (action === "extend-code") {
+    await extendCode(routeId, codePlain);
+    return;
+  }
+  if (action === "revoke-code") {
+    await revokeCode(routeId, codePlain);
+  }
+});
+
+window.addEventListener("DOMContentLoaded", async () => {
+  await loadAllRouteCodes({
+    quiet: true
+  });
+});
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  try {
+    await fetch("/admin/api/logout", {
+      method: "POST",
+      credentials: "include"
+    });
+  } finally {
+    window.location.href = "/admin/login";
+  }
+});
+document.getElementById('filterCodes').addEventListener('click', () => loadRouteCodes());
+document.getElementById('exportRouteId').addEventListener('input', event => {
+  const route = event.target.value.trim();
+  document.querySelectorAll('[data-export]').forEach(link => link.href = link.dataset.export + (route ? '?route_id=' + encodeURIComponent(route) : ''));
+});
+</script>
+</body>
+</html>

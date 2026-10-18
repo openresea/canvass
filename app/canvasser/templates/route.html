@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Your route · Resea Canvass</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="app-header">
+<div class="brand">
+Resea Canvass <span class="hd-badge">Canvasser</span>
+</div>
+<div class="account">
+<span class="account-email">{{ surveyor_name }}</span>
+<button id="logoutBtn" class="btn-logout" type="button">Sign out</button>
+</div>
+</header>
+<main id="main" class="page-shell field-shell">
+<div class="page-intro">
+<div>
+<span class="eyebrow">Canvassing</span>
+<h1>Record a visit</h1>
+<p>Choose an address, record the outcome, and save any survey answers.</p>
+</div>
+<span class="badge">Route {{ route_id }}</span>
+</div>
+<details class="instructions">
+<summary>How to record a visit</summary>
+<ol>
+<li>Choose the street, house and unit you’re visiting. Add missing details using the links below each field.</li>
+<li>Select a resident, or choose “Name not known” or “Whole household”.</li>
+<li>Record what happened. Only ask the survey questions if the resident wants to take part.</li>
+<li>Save the visit. The address stays selected so you can choose the next resident.</li>
+</ol>
+</details>
+<div class="visit-grid">
+<section class="card visit-location" aria-labelledby="location-title">
+<div class="section-head">
+<div>
+<h2 id="location-title">Where are you visiting?</h2>
+</div>
+<button id="reloadAddrsBtn" class="quiet-btn" type="button">Refresh</button>
+</div>
+<p id="addrMsg" class="small" role="status"></p>
+<div class="step">
+<label for="addrSelect" class="step-label">Street</label>
+<select id="addrSelect">
+<option value="">Select a street…</option>
+</select>
+<button type="button" class="link-btn" id="toggleManualStreet" aria-controls="manualStreetSection" aria-expanded="false">+ Add a street that isn’t listed</button>
+<div id="manualStreetSection" class="manual-panel">
+<label for="manualStreetName">Street name</label>
+<input id="manualStreetName" type="text" placeholder="e.g. Park Road">
+<button id="useStreetBtn">Use this street</button>
+</div>
+</div>
+<div class="step">
+<label for="houseSelect" class="step-label">House or building</label>
+<select id="houseSelect" disabled>
+<option value="">Choose a street first</option>
+</select>
+<button type="button" class="link-btn" id="toggleManualAddr" aria-controls="manualAddrSection" aria-expanded="false">+ Add a house or building</button>
+<div id="manualAddrSection" class="manual-panel">
+<label for="manualHouseNum">House number or name</label>
+<input id="manualHouseNum" type="text" placeholder="e.g. 12 or Maple House">
+<button id="addAddrBtn">Use this house/building</button>
+<p id="addrAddMsg" class="small" role="status"></p>
+</div>
+</div>
+<div class="step">
+<label for="unitSelect" class="step-label">Flat or unit</label>
+<select id="unitSelect" disabled>
+<option value="">Choose a house first</option>
+</select>
+<button type="button" class="link-btn" id="toggleManualFlat" aria-controls="manualFlatSection" aria-expanded="false">+ Add a flat or unit</button>
+<div id="manualFlatSection" class="manual-panel">
+<label for="manualFlatNum">Flat or unit number</label>
+<input id="manualFlatNum" type="text" placeholder="e.g. 1A" disabled>
+<button id="addFlatBtn" disabled>Use this flat/unit</button>
+</div>
+<p id="flatMsg" class="small" role="status"></p>
+</div>
+<div class="step">
+<label for="personSelect" class="step-label">Who did you visit?</label>
+<select id="personSelect" disabled>
+<option value="">Choose a flat or unit first</option>
+</select>
+<div class="inline2">
+<button id="notKnownBtn" class="secondary" disabled>Name not known</button>
+<button id="wholeHouseholdBtn" class="secondary" disabled>Whole household</button>
+</div>
+<button type="button" class="link-btn" id="toggleManualPerson" aria-controls="manualPersonSection" aria-expanded="false">+ Add a resident</button>
+<div id="manualPersonSection" class="manual-panel">
+<label for="manualName">Resident’s name</label>
+<input id="manualName" type="text" placeholder="Name" disabled>
+<button id="addPersonBtn" disabled>Use this name</button>
+</div>
+</div>
+</section>
+<section class="card visit-conversation" aria-labelledby="conversation-title">
+<h2 id="conversation-title">How did the visit go?</h2>
+<p id="visitContext" class="visit-context">Choose a doorstep to start your visit.</p>
+<label for="contactStatus">What happened at the door?</label>
+<select id="contactStatus">
+<option value="answered">Had a conversation</option>
+<option value="no_answer">No answer</option>
+<option value="refused">Declined to take part</option>
+<option value="inaccessible">Could not access the address</option>
+</select>
+<p class="small" style="margin-top:12px">Ask permission before recording answers. It’s always okay to decline.</p>
+<p id="surveyNotice" role="status" aria-live="polite"></p>
+<div id="surveyQuestions">
+</div>
+<button id="reloadSurvey" type="button" class="quiet-btn">Reload survey questions</button>
+<label for="notesField">Notes (optional)</label>
+<textarea maxlength="2000" id="notesField" rows="3" placeholder="Relevant concerns or agreed follow-up for your campaign">
+</textarea>
+</section>
+</div>
+<section class="save-bar" aria-label="Save your visit">
+<div>
+<strong id="saveHeading">Choose a person to get started</strong>
+<p id="saveHint">Your address will stay selected for the next visit.</p>
+<div id="submitMsg" class="small" role="status" aria-live="polite"></div>
+</div>
+<button id="submitBtn" disabled>Save visit</button>
+</section>
+</main>
+<script nonce="{{ request.state.csp_nonce }}">
+let survey = null;
+let submitting = false;
+const routeId = {{ route_id | tojson }};
+const HOUSE_UNIT_LABEL = "House / whole address";
+
+let selectedAddressId = null;
+let selectedFlatId = null;
+let selectedUnitLabel = "";
+let allAddresses = [];
+let flatRows = [];
+let manualUnitLabels = [];
+let selectedStreetName = "";
+let pendingSubmissionId = "";
+
+function setMsg(id, txt, cls = "small") {
+  const el = document.getElementById(id);
+  el.className = cls;
+  el.textContent = txt;
+}
+
+function escHtml(v) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function responseErrorMessage(status) {
+  if (status === 401) return "Authentication required.";
+  if (status === 403) return "Access denied.";
+  if (status === 409) return "Request conflict. Please reload and try again.";
+  if (status >= 500) return "Server error. Please try again.";
+  return "Request failed.";
+}
+
+async function apiGet(url) {
+  const r = await fetch(url, {
+    credentials: "include"
+  });
+  const t = await r.text();
+  if (!r.ok) {
+    let detail;
+    try {
+      detail = JSON.parse(t).detail;
+    } catch (_) {}
+    throw new Error(typeof detail === 'string' ? detail : responseErrorMessage(r.status));
+  }
+  return JSON.parse(t);
+}
+
+async function apiPost(url, body) {
+  const r = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body),
+  });
+  const t = await r.text();
+  if (!r.ok) {
+    let detail;
+    try {
+      detail = JSON.parse(t).detail;
+    } catch (_) {}
+    throw new Error(typeof detail === 'string' ? detail : responseErrorMessage(r.status));
+  }
+  return JSON.parse(t);
+}
+
+function generateSubmissionId() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).slice(1);
+  return `${s4()}${s4()}-${s4()}-4${s4().slice(1)}-${((8 + Math.random() * 4) | 0).toString(16)}${s4().slice(1)}-${s4()}${s4()}${s4()}`;
+}
+
+function compareAddresses(a, b) {
+  const sc = String(a.street || "").localeCompare(String(b.street || ""), undefined, {
+    numeric: true,
+    sensitivity: "base"
+  });
+  if (sc) return sc;
+  return String(a.house || "").localeCompare(String(b.house || ""), undefined, {
+    numeric: true,
+    sensitivity: "base"
+  });
+}
+
+function collectAnswers() {
+  if (document.getElementById('contactStatus').value !== 'answered') return {};
+  const answers = {};
+  document.querySelectorAll('[data-question-id]').forEach(el => {
+    if (el.type !== 'radio' || el.checked) {
+      if (el.value.trim()) answers[el.dataset.questionId] = el.value.trim();
+    }
+  });
+  return answers;
+}
+
+function updateSubmitState() {
+  const answers = collectAnswers();
+  const answered = document.getElementById('contactStatus').value === 'answered';
+  const complete = survey && (!answered || survey.questions.every(q => !q.required || answers[q.id]));
+  document.getElementById('submitBtn').disabled = submitting || !selectedFlatId || !complete;
+  document.getElementById('submitBtn').textContent = submitting ? 'Saving…' : 'Save visit';
+  const missing = survey && answered ? survey.questions.filter(q => q.required && !answers[q.id]).length : 0;
+  document.getElementById('saveHeading').textContent = submitting ? 'Saving your visit…' : !selectedFlatId ? 'Choose a person to get started' : !survey ? 'Load the survey before saving' : missing ? `Answer ${missing} required question${missing === 1 ? '' : 's'}` : 'Your visit is ready to save';
+  const address = allAddresses.find(a => String(a.address_id) === String(selectedAddressId));
+  const person = flatRows.find(f => String(f.flat_id) === String(selectedFlatId));
+  document.getElementById('visitContext').textContent = address ? [address.house, address.street, selectedUnitLabel === HOUSE_UNIT_LABEL ? '' : selectedUnitLabel, person ? personLabelForFlat(person) : ""].filter(Boolean).join(' · ') : 'Choose a doorstep to start your visit.';
+  for (const button of document.querySelectorAll('[aria-controls]')) {
+    const panel = document.getElementById(button.getAttribute('aria-controls'));
+    button.setAttribute('aria-expanded', String(panel.style.display === 'block'));
+  }
+}
+
+function clearSurvey() {
+  document.querySelectorAll('[data-question-id]').forEach(el => {
+    if (el.type === 'radio') el.checked = false;
+    else el.value = '';
+  });
+  document.getElementById('contactStatus').value = 'answered';
+  document.getElementById('surveyQuestions').hidden = false;
+  document.getElementById('notesField').value = '';
+}
+async function loadSurvey() {
+  const previous = collectAnswers();
+  survey = await apiGet(`/api/survey?route_id=${encodeURIComponent(routeId)}`);
+  const container = document.getElementById('surveyQuestions');
+  container.replaceChildren();
+  survey.questions.forEach(q => {
+    const field = document.createElement('fieldset');
+    const legend = document.createElement('legend');
+    legend.textContent = q.prompt + (q.required ? ' (required)' : ' (optional)');
+    field.append(legend);
+    if (q.kind === 'text') {
+      const input = document.createElement('textarea');
+      input.rows = 3;
+      input.maxLength = 2000;
+      input.dataset.questionId = q.id;
+      input.setAttribute('aria-label', q.prompt);
+      input.value = previous[q.id] || '';
+      field.append(input);
+    } else {
+      field.className = 'radioRow';
+      q.options.forEach(value => {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'question_' + q.id;
+        input.dataset.questionId = q.id;
+        input.value = value;
+        input.checked = previous[q.id] === value;
+        label.append(input, document.createTextNode(value));
+        field.append(label);
+      });
+    }
+    container.append(field);
+  });
+  document.getElementById('surveyNotice').textContent = survey.questions.length ? '' : 'No survey questions have been set. You can still record a visit outcome and notes.';
+  pendingSubmissionId = '';
+  updateSubmitState();
+}
+document.getElementById('reloadSurvey').addEventListener('click', async () => {
+  try {
+    await loadSurvey();
+    setMsg('submitMsg', 'Questions reloaded. Review your answers before saving.');
+  } catch (e) {
+    setMsg('submitMsg', e.message, 'error');
+  }
+});
+document.getElementById('contactStatus').addEventListener('change', () => {
+  document.getElementById('surveyQuestions').hidden = document.getElementById('contactStatus').value !== 'answered';
+  pendingSubmissionId = '';
+  updateSubmitState();
+});
+document.getElementById('surveyQuestions').addEventListener('input', () => {
+  pendingSubmissionId = '';
+  updateSubmitState();
+});
+document.getElementById('notesField').addEventListener('input', () => {
+  pendingSubmissionId = '';
+});
+
+async function loadAddresses() {
+  const items = await apiGet(`/api/addresses/list?route_id=${encodeURIComponent(routeId)}&limit=5000`);
+  allAddresses = (items || []).sort(compareAddresses);
+  renderStreetOptions();
+  populateHouseOptions();
+}
+
+function renderStreetOptions() {
+  const sel = document.getElementById("addrSelect");
+  const current = selectedStreetName || sel.value || "";
+  sel.innerHTML = `<option value="">Select a street...</option>`;
+  const seen = new Set();
+  for (const it of allAddresses) {
+    const street = (it.street || "").trim();
+    if (!street || seen.has(street.toLowerCase())) continue;
+    seen.add(street.toLowerCase());
+    const opt = document.createElement("option");
+    opt.value = street;
+    opt.textContent = street;
+    sel.appendChild(opt);
+  }
+  if (current) {
+    const match = Array.from(sel.options).find(o => o.value.toLowerCase() === current.toLowerCase());
+    if (match) sel.value = match.value;
+  }
+}
+
+function populateHouseOptions() {
+  const sel = document.getElementById("houseSelect");
+  const street = (selectedStreetName || "").trim().toLowerCase();
+  sel.innerHTML = `<option value="">Select a house/building...</option>`;
+  sel.disabled = !street;
+  if (!street) return;
+  for (const a of allAddresses.filter(a => (a.street || "").trim().toLowerCase() === street)) {
+    const opt = document.createElement("option");
+    opt.value = a.address_id;
+    const houseTxt = (a.house || "").trim() || "(no house number)";
+    const pcTxt = (a.postcode || "").trim();
+    opt.textContent = pcTxt ? `${houseTxt} (${pcTxt})` : houseTxt;
+    sel.appendChild(opt);
+  }
+}
+
+function normalizeUnitLabel(value) {
+  const text = String(value ?? "").trim();
+  return text || HOUSE_UNIT_LABEL;
+}
+
+function unitLabelForFlat(f) {
+  return normalizeUnitLabel(f.unit_label || f.flat_number || "");
+}
+
+function personLabelForFlat(f) {
+  return String(f.person_label || f.resident_name || f.elector_id || "").trim();
+}
+
+function compareText(a, b) {
+  return String(a || "").localeCompare(String(b || ""), undefined, {
+    numeric: true,
+    sensitivity: "base"
+  });
+}
+
+function setPersonControlsEnabled(enabled) {
+  const hasUnit = enabled && !!selectedUnitLabel;
+  const hasPeople = hasUnit && flatRows.some(f =>
+    unitLabelForFlat(f).toLowerCase() === selectedUnitLabel.toLowerCase() &&
+    personLabelForFlat(f)
+  );
+  document.getElementById("unitSelect").disabled = !enabled;
+  document.getElementById("personSelect").disabled = !hasPeople;
+  document.getElementById("notKnownBtn").disabled = !hasUnit;
+  document.getElementById("wholeHouseholdBtn").disabled = !hasUnit;
+  document.getElementById("manualFlatNum").disabled = !enabled;
+  document.getElementById("addFlatBtn").disabled = !enabled;
+  document.getElementById("manualName").disabled = !hasUnit;
+  document.getElementById("addPersonBtn").disabled = !hasUnit;
+}
+
+function renderUnitOptions() {
+  const sel = document.getElementById("unitSelect");
+  const current = selectedUnitLabel || sel.value || "";
+  const labels = Array.from(new Set([HOUSE_UNIT_LABEL, ...manualUnitLabels, ...flatRows.map(unitLabelForFlat)]));
+  labels.sort((a, b) => {
+    if (a === HOUSE_UNIT_LABEL && b !== HOUSE_UNIT_LABEL) return -1;
+    if (b === HOUSE_UNIT_LABEL && a !== HOUSE_UNIT_LABEL) return 1;
+    return compareText(a, b);
+  });
+
+  sel.innerHTML = `<option value="">Select a flat/house...</option>`;
+  for (const label of labels) {
+    const opt = document.createElement("option");
+    opt.value = label;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  }
+
+  const match = current ? labels.find(label => label.toLowerCase() === current.toLowerCase()) : "";
+  selectedUnitLabel = match || (labels.length === 1 ? labels[0] : "");
+  sel.value = selectedUnitLabel;
+}
+
+function renderPeopleOptions() {
+  const sel = document.getElementById("personSelect");
+  const current = selectedFlatId || sel.value || "";
+  const filtered = selectedUnitLabel ?
+    flatRows.filter(f =>
+      unitLabelForFlat(f).toLowerCase() === selectedUnitLabel.toLowerCase() &&
+      personLabelForFlat(f)
+    ) :
+    [];
+
+  if (!selectedUnitLabel) {
+    sel.innerHTML = `<option value="">Select a flat/house first...</option>`;
+  } else if (!filtered.length) {
+    sel.innerHTML = `<option value="">No names yet</option>`;
+  } else {
+    sel.innerHTML = `<option value="">Select a name...</option>`;
+    for (const f of [...filtered].sort((a, b) => compareText(personLabelForFlat(a), personLabelForFlat(b)))) {
+      const opt = document.createElement("option");
+      opt.value = f.flat_id;
+      const answered = f.status === "answered" ? " (answered)" : "";
+      opt.textContent = `${personLabelForFlat(f)}${answered}`;
+      sel.appendChild(opt);
+    }
+  }
+
+  const stillVisible = current && filtered.some(f => String(f.flat_id) === String(current));
+  selectedFlatId = stillVisible ? current : null;
+  sel.value = selectedFlatId || "";
+  setPersonControlsEnabled(!!selectedAddressId);
+  updateSubmitState();
+}
+
+async function loadFlats(addressId) {
+  flatRows = await apiGet(`/api/flats?route_id=${encodeURIComponent(routeId)}&address_id=${encodeURIComponent(addressId)}`);
+  if (!Array.isArray(flatRows)) flatRows = [];
+  renderUnitOptions();
+  renderPeopleOptions();
+}
+
+function addManualUnit(unitLabel) {
+  const unit = normalizeUnitLabel(unitLabel);
+  if (!manualUnitLabels.some(label => label.toLowerCase() === unit.toLowerCase())) {
+    manualUnitLabels.push(unit);
+  }
+  selectedUnitLabel = unit;
+  selectedFlatId = null;
+  pendingSubmissionId = "";
+  renderUnitOptions();
+  renderPeopleOptions();
+  setMsg("flatMsg", "Flat/house added. Now choose or add a name.", "ok");
+}
+
+function selectFlatById(flatId) {
+  if (selectedFlatId !== flatId) clearSurvey();
+  selectedFlatId = flatId;
+  pendingSubmissionId = "";
+  updateSubmitState();
+}
+
+async function createAndSelectFlat(unitLabel, residentName) {
+  if (!selectedAddressId) return;
+  const unit = normalizeUnitLabel(unitLabel);
+  const flatNumber = unit === HOUSE_UNIT_LABEL ? "" : unit;
+  const shouldSelectPerson = !!String(residentName || "").trim();
+  try {
+    const res = await apiPost("/api/flats", {
+      route_id: routeId,
+      address_id: selectedAddressId,
+      flat_label: unit,
+      flat_number: flatNumber || undefined,
+      resident_name: residentName || undefined,
+    });
+    selectedUnitLabel = unit;
+    selectedFlatId = shouldSelectPerson ? res.flat_id : null;
+    await loadFlats(selectedAddressId);
+    setMsg("flatMsg", "");
+  } catch (e) {
+    void(e);
+    setMsg("flatMsg", "Could not add person. Please try again.", "error");
+  }
+}
+
+function resetAfterSubmit() {
+  pendingSubmissionId = "";
+  selectedFlatId = null;
+  document.getElementById("personSelect").value = "";
+  clearSurvey();
+  document.getElementById("notesField").value = "";
+  updateSubmitState();
+  // person controls stay enabled - canvasser can immediately pick the next person
+}
+
+document.getElementById("reloadAddrsBtn").addEventListener("click", async () => {
+  try {
+    await loadAddresses();
+    setMsg("addrMsg", "Reloaded.", "ok");
+  } catch (e) {
+    void(e);
+    setMsg("addrMsg", "Reload failed. Please try again.", "error");
+  }
+});
+
+function resetPersonSection() {
+  selectedFlatId = null;
+  selectedUnitLabel = "";
+  flatRows = [];
+  manualUnitLabels = [];
+  pendingSubmissionId = "";
+  document.getElementById("unitSelect").innerHTML = `<option value="">Select a flat/house...</option>`;
+  document.getElementById("personSelect").innerHTML = `<option value="">Select a name...</option>`;
+  document.getElementById("manualFlatNum").value = "";
+  document.getElementById("manualName").value = "";
+  document.getElementById("manualFlatSection").style.display = "none";
+  document.getElementById("manualPersonSection").style.display = "none";
+  setPersonControlsEnabled(false);
+  clearSurvey();
+  updateSubmitState();
+  setMsg("flatMsg", "");
+}
+
+document.getElementById("addrSelect").addEventListener("change", async (e) => {
+  selectedStreetName = (e.target.value || "").trim();
+  selectedAddressId = null;
+  document.getElementById("manualStreetSection").style.display = "none";
+  populateHouseOptions();
+  document.getElementById("houseSelect").value = "";
+  resetPersonSection();
+});
+
+document.getElementById("houseSelect").addEventListener("change", async (e) => {
+  selectedAddressId = e.target.value || null;
+  document.getElementById("manualAddrSection").style.display = "none";
+  resetPersonSection();
+  if (selectedAddressId) {
+    try {
+      await loadFlats(selectedAddressId);
+      setPersonControlsEnabled(true);
+    } catch (e) {
+      void(e);
+      setMsg("flatMsg", "Could not load people. Please try again.", "error");
+    }
+  }
+});
+
+document.getElementById("unitSelect").addEventListener("change", async (e) => {
+  selectedUnitLabel = e.target.value || "";
+  selectedFlatId = null;
+  pendingSubmissionId = "";
+  renderPeopleOptions();
+  setMsg("flatMsg", "");
+});
+
+document.getElementById("personSelect").addEventListener("change", async (e) => {
+  const flatId = e.target.value || null;
+  if (!flatId) {
+    selectedFlatId = null;
+    pendingSubmissionId = "";
+    updateSubmitState();
+    return;
+  }
+  selectFlatById(flatId);
+  setMsg("flatMsg", "");
+});
+
+document.getElementById("notKnownBtn").addEventListener("click", async () => {
+  if (!selectedUnitLabel) {
+    setMsg("flatMsg", "Choose a flat/house first.", "error");
+    return;
+  }
+  await createAndSelectFlat(selectedUnitLabel, "Not known");
+});
+
+document.getElementById("wholeHouseholdBtn").addEventListener("click", async () => {
+  if (!selectedUnitLabel) {
+    setMsg("flatMsg", "Choose a flat/house first.", "error");
+    return;
+  }
+  await createAndSelectFlat(selectedUnitLabel, "Whole household");
+});
+
+document.getElementById("addPersonBtn").addEventListener("click", async () => {
+  const name = document.getElementById("manualName").value.trim();
+  if (!selectedUnitLabel) {
+    setMsg("flatMsg", "Choose a flat/house first.", "error");
+    return;
+  }
+  if (!name) {
+    setMsg("flatMsg", "Enter a name first.", "error");
+    return;
+  }
+  await createAndSelectFlat(selectedUnitLabel, name);
+  document.getElementById("manualName").value = "";
+});
+
+document.getElementById("toggleManualStreet").addEventListener("click", () => {
+  const sec = document.getElementById("manualStreetSection");
+  const open = sec.style.display === "block";
+  sec.style.display = open ? "none" : "block";
+  if (!open) {
+    document.getElementById("manualStreetName").value = selectedStreetName || "";
+  }
+});
+
+document.getElementById("useStreetBtn").addEventListener("click", () => {
+  const street = document.getElementById("manualStreetName").value.trim();
+  if (!street) {
+    setMsg("addrMsg", "Enter a street name.", "error");
+    return;
+  }
+  selectedStreetName = street;
+  selectedAddressId = null;
+  // Add to addrSelect if not already listed
+  const addrSel = document.getElementById("addrSelect");
+  if (!Array.from(addrSel.options).some(o => o.value.toLowerCase() === street.toLowerCase())) {
+    const opt = document.createElement("option");
+    opt.value = street;
+    opt.textContent = street;
+    addrSel.appendChild(opt);
+  }
+  addrSel.value = street;
+  populateHouseOptions();
+  document.getElementById("houseSelect").value = "";
+  resetPersonSection();
+  document.getElementById("manualStreetSection").style.display = "none";
+  document.getElementById("manualStreetName").value = "";
+  setMsg("addrMsg", "");
+  const hasHouses = Array.from(document.getElementById("houseSelect").options).some(o => o.value);
+  if (hasHouses) return;
+  document.getElementById("manualAddrSection").style.display = "block";
+  document.getElementById("manualHouseNum").focus();
+});
+
+document.getElementById("toggleManualAddr").addEventListener("click", () => {
+  if (!selectedStreetName) {
+    setMsg("addrAddMsg", "Choose or enter a street first.", "error");
+    return;
+  }
+  const sec = document.getElementById("manualAddrSection");
+  const open = sec.style.display === "block";
+  sec.style.display = open ? "none" : "block";
+  if (!open) {
+    document.getElementById("manualHouseNum").focus();
+    setMsg("addrAddMsg", "");
+  }
+});
+
+document.getElementById("addAddrBtn").addEventListener("click", async () => {
+  const street = selectedStreetName;
+  const house = document.getElementById("manualHouseNum").value.trim();
+  if (!street) {
+    setMsg("addrAddMsg", "Choose or enter a street first.", "error");
+    return;
+  }
+  if (!house) {
+    setMsg("addrAddMsg", "Enter a house or building.", "error");
+    return;
+  }
+  try {
+    const res = await apiPost("/api/addresses", {
+      route_id: routeId,
+      street,
+      house,
+    });
+    if (!allAddresses.some(a => String(a.address_id) === String(res.address_id))) {
+      allAddresses.push(res);
+    }
+    allAddresses.sort(compareAddresses);
+    selectedStreetName = res.street;
+    selectedAddressId = res.address_id;
+    renderStreetOptions();
+    populateHouseOptions();
+    document.getElementById("houseSelect").value = res.address_id;
+    resetPersonSection();
+    await loadFlats(res.address_id);
+    setPersonControlsEnabled(true);
+    document.getElementById("manualAddrSection").style.display = "none";
+    document.getElementById("manualHouseNum").value = "";
+    setMsg("addrAddMsg", "");
+    setMsg("addrMsg", "Address added.", "ok");
+  } catch (e) {
+    void(e);
+    setMsg("addrAddMsg", "Could not add address. Please try again.", "error");
+  }
+});
+
+document.getElementById("toggleManualFlat").addEventListener("click", () => {
+  const sec = document.getElementById("manualFlatSection");
+  sec.style.display = sec.style.display === "block" ? "none" : "block";
+});
+
+document.getElementById("addFlatBtn").addEventListener("click", async () => {
+  const flatNum = document.getElementById("manualFlatNum").value.trim();
+  if (!flatNum) {
+    setMsg("flatMsg", "Enter a flat or unit number.", "error");
+    return;
+  }
+  addManualUnit(flatNum);
+  document.getElementById("manualFlatNum").value = "";
+  document.getElementById("manualFlatSection").style.display = "none";
+});
+
+document.getElementById("toggleManualPerson").addEventListener("click", () => {
+  const sec = document.getElementById("manualPersonSection");
+  sec.style.display = sec.style.display === "block" ? "none" : "block";
+});
+
+document.getElementById("submitBtn").addEventListener("click", async () => {
+  const submitBtn = document.getElementById("submitBtn");
+  if (!selectedFlatId) {
+    setMsg("submitMsg", "Select a person first.", "error");
+    return;
+  }
+  if (!survey || submitting) return;
+
+  try {
+    submitting = true;
+    updateSubmitState();
+    if (!pendingSubmissionId) pendingSubmissionId = generateSubmissionId();
+    const notesVal = document.getElementById("notesField").value.trim();
+    await apiPost(`/api/responses?route_id=${encodeURIComponent(routeId)}`, {
+      submission_id: pendingSubmissionId,
+      flat_id: selectedFlatId,
+      survey_version: survey.version,
+      answers: collectAnswers(),
+      contact_status: document.getElementById("contactStatus").value,
+      notes: notesVal,
+    });
+    setMsg("submitMsg", "Saved.", "ok");
+    if (selectedAddressId) await loadFlats(selectedAddressId);
+    resetAfterSubmit();
+    if (selectedAddressId) setPersonControlsEnabled(true);
+    document.getElementById("personSelect").focus({preventScroll:true});
+  } catch (e) {
+    void(e);
+    setMsg("submitMsg", e.message || "Could not save. Your answers are still here. Please retry.", "error");
+  } finally {
+    submitting = false;
+    updateSubmitState();
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  try {
+    await apiPost('/api/logout', {});
+    window.location.assign('/join');
+  } catch (e) {
+    setMsg('submitMsg', e.message, 'error');
+  }
+});
+document.querySelectorAll('[aria-controls]').forEach(button => button.addEventListener('click', () => {
+  const panel = document.getElementById(button.getAttribute('aria-controls'));
+  button.setAttribute('aria-expanded', String(panel.style.display === 'block'));
+  if (panel.style.display === 'block') panel.querySelector('input')?.focus();
+}));
+(async () => {
+  try {
+    await apiGet(`/api/me?route_id=${encodeURIComponent(routeId)}`);
+    await loadSurvey();
+    await loadAddresses();
+  } catch (e) {
+    void(e);
+    setMsg("addrMsg", e.message || "Could not load your route. Try refreshing the addresses, or sign in again.", "error");
+  }
+})();
+</script>
+</body>
+</html>

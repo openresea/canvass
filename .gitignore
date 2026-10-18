@@ -1,0 +1,55 @@
+# Local configuration and hidden working directories
+.[!.]*/
+!.github/
+!.github/**
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python environments, caches and build output
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+ENV/
+node_modules/
+pytest-cache-files-*/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local data, exports and backups
+*.db
+*.sqlite*
+*.dump
+*.backup
+*.bak
+*.csv
+*.xlsx
+*.zip
+*.tar
+*.tar.gz
+*.log
+outputs/
+backups/
+
+# Infrastructure state
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log
+
+# Operating system files
+.DS_Store
+._*
+Thumbs.db
+
+!docs/sample-route.csv

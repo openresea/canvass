@@ -1,0 +1,7 @@
+fastapi==0.135.3
+uvicorn[standard]==0.43.0
+Jinja2==3.1.6
+psycopg2-binary==2.9.11
+cryptography==50.0.0
+python-multipart==0.0.31
+starlette==1.7.0

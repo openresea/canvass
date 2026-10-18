@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in · Resea Canvass</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main class="signin-shell">
+<section class="signin-story">
+<div class="brand">
+Resea Canvass</div>
+<h1>Organise your visits.</h1>
+<p>Follow your route, ask your team’s questions, and record each visit.</p>
+<ul class="signin-points">
+<li>
+<span>1</span>Sign in with a code from your email</li>
+<li>
+<span>2</span>Follow your team’s questions</li>
+<li>
+<span>3</span>Save the answers</li>
+</ul>
+</section>
+<section>
+<div class="card signin-card">
+<div class="signin-progress" aria-label="Sign-in steps">
+<span id="emailStep" class="current">1 · Your details</span>
+<span id="codeStep">2 · Email code</span>
+</div>
+<h2>Sign in</h2>
+<p>{{ 'Sign in with your approved admin email address.' if is_admin else 'Use your email and the route code from your organiser.' }}</p>
+<form id="emailForm">
+<label for="email">Email address</label>
+<input id="email" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com">{% if not is_admin %}<label for="displayName">Your name</label>
+<input id="displayName" autocomplete="name" maxlength="100" required placeholder="How your team knows you">
+<label for="routeCode">Route code</label>
+<input id="routeCode" autocomplete="off" maxlength="512" required placeholder="From your organiser">{% endif %}<button id="sendCode" type="submit">Email me a sign-in code</button>
+</form>
+<form id="codeForm" hidden>
+<label for="code">6-digit sign-in code</label>
+<input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required placeholder="000000">
+<p class="small" style="margin-top:10px">Use the latest code. It expires in 10 minutes.</p>
+<button id="verifyCode" type="submit">{{ 'Sign in' if is_admin else 'Join my route' }}</button>
+</form>
+<p id="status" role="status" aria-live="polite" style="margin:16px 0 0"></p>
+</div>
+<p class="signin-foot">Never share your sign-in code.</p>
+</section>
+</main>
+<script nonce="{{ request.state.csp_nonce }}">
+const admin = {{ is_admin | tojson }};
+let challengeId = '',
+  requestedEmail = '',
+  cooldown = 0,
+  sending = false;
+const el = id => document.getElementById(id);
+
+function status(text, error = false) {
+  el('status').textContent = text;
+  el('status').className = error ? 'error' : 'ok';
+}
+async function post(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not sign in. Please try again.');
+  return data;
+}
+
+function tick() {
+  const remaining = Math.max(0, Math.ceil((cooldown - Date.now()) / 1000));
+  el('sendCode').disabled = sending || remaining > 0;
+  el('sendCode').textContent = remaining ? `Send another code in ${remaining}s` : (challengeId ? 'Send another code' : 'Email me a sign-in code');
+}
+setInterval(tick, 1000);
+el('emailForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (sending || cooldown > Date.now()) return;
+  sending = true;
+  tick();
+  status('Requesting your code…');
+  try {
+    const email = el('email').value.trim();
+    const data = await post(admin ? '/admin/api/request-code' : '/api/request-code', {
+      email
+    });
+    challengeId = data.challenge_id;
+    requestedEmail = email;
+    cooldown = Date.now() + 60000;
+    el('codeForm').hidden = false;
+    el('emailStep').classList.remove('current');
+    el('codeStep').classList.add('current');
+    el('code').value = '';
+    el('code').focus();
+    status(data.detail);
+  } catch (e) {
+    status(e.message, true);
+  } finally {
+    sending = false;
+    tick();
+  }
+});
+el('email').addEventListener('input', () => {
+  challengeId = '';
+  el('codeForm').hidden = true;
+  el('emailStep').classList.add('current');
+  el('codeStep').classList.remove('current');
+});
+el('codeForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!challengeId) return;
+  el('verifyCode').disabled = true;
+  status('Checking your code…');
+  try {
+    const body = {
+      email: requestedEmail,
+      challenge_id: challengeId,
+      code: el('code').value.trim()
+    };
+    if (!admin) {
+      body.display_name = el('displayName').value.trim();
+      body.route_code = el('routeCode').value.trim();
+    }
+    const data = await post(admin ? '/admin/api/login' : '/api/join', body);
+    window.location.assign(admin ? '/' : `/r/${encodeURIComponent(data.route_id)}`);
+  } catch (e) {
+    status(e.message, true);
+    el('code').focus();
+  } finally {
+    el('verifyCode').disabled = false;
+  }
+});
+</script></body></html>
